@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-vram-calculator"
+version = "1.0.0"
+authors = [
+  { name = "DangerousANEN", email = "anen@local.dev" },
+]
+description = "Fast, zero-dependency VRAM and KV-cache calculator for local LLM inference (vLLM, llama.cpp, Ollama)."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = ["llm", "vram", "kv-cache", "inference", "vllm", "llama-cpp", "deepseek", "qwen"]
+
+[project.scripts]
+llm-vram-calc = "vram_calc:main"
+
+[project.urls]
+"Homepage" = "https://dangerousanen.github.io/llm-vram-calculator/"
+"Repository" = "https://github.com/DangerousANEN/llm-vram-calculator"
+"Telegram Channel" = "https://t.me/llm_hubs"

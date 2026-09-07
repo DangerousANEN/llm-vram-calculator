@@ -1,19 +1,21 @@
 # ⚡ LLM VRAM Calculator & Inference Speedtest
 
 [![Telegram](https://img.shields.io/badge/Telegram-.llm%20hubs-0088cc?logo=telegram&style=for-the-badge)](https://t.me/llm_hubs)
+[![Live WebApp](https://img.shields.io/badge/Live_WebApp-Interactive_Calc-00d2ff?style=for-the-badge)](https://dangerousanen.github.io/llm-vram-calculator/)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
+
+> **🚀 Интерактивный WebApp калькулятор:** [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
+> **📢 Официальный инженерный канал:** [**.llm hubs**](https://t.me/llm_hubs) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
 
 Легковесная автономная CLI-утилита без внешних зависимостей (pure Python stdlib) для:
 1. **Точного расчета видеопамяти (VRAM)** под любую открытую модель (7B–671B): веса модели ($M_{weights}$), аппетит динамического KV-кэша ($M_{kv}$), контекстные окна (4k–128k токенов), активации и оверхед CUDA.
 2. **Спидтеста локального и облачного инференса** (vLLM, llama.cpp, Ollama, SGLang, OpenAI API) с замером **TTFT** (Time to First Token) и **TPS** (Tokens/sec).
 
-Разработано исследовательской лабораторией Telegram-канала [**.llm hubs**](https://t.me/llm_hubs).
-
 ---
 
-![VRAM Cheatsheet & Memory Matrix](vram_cheatsheet.png)
+![VRAM Cheatsheet & Memory Matrix](kv_cache_infographic.png)
 
 ---
 
