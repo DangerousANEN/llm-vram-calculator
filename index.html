@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LLM VRAM & KV-Cache Calculator — .llm hubs</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0d14;
+            --card-bg: #121722;
+            --card-inner: #192030;
+            --border-color: #242e42;
+            --border-hover: #00d2ff;
+            --text-main: #f0f6fc;
+            --text-muted: #8b9bb4;
+            --accent-cyan: #00d2ff;
+            --accent-green: #2ecc71;
+            --accent-purple: #a855f7;
+            --accent-red: #ff5252;
+            --accent-orange: #ff9f43;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 680px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, rgba(0, 210, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(0, 210, 255, 0.12);
+            color: var(--accent-cyan);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            margin-bottom: 8px;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .val-badge {
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+
+        select, input[type="range"] {
+            width: 100%;
+        }
+
+        select {
+            background-color: var(--card-inner);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            outline: none;
+            transition: border-color 0.2s;
+            cursor: pointer;
+        }
+
+        select:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        .grid-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .opt-btn {
+            background-color: var(--card-inner);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .opt-btn.active {
+            background: rgba(0, 210, 255, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* Results Display */
+        .results-box {
+            background: linear-gradient(180deg, #161e2e 0%, #111724 100%);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .metric-name {
+            color: var(--text-muted);
+        }
+
+        .metric-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .metric-total {
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+            margin-top: 4px;
+        }
+
+        .metric-total .metric-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .metric-total .metric-val {
+            font-size: 20px;
+            color: var(--accent-cyan);
+        }
+
+        .gpu-recommendation {
+            background-color: rgba(46, 204, 113, 0.1);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .gpu-icon {
+            font-size: 24px;
+        }
+
+        .gpu-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gpu-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--accent-green);
+            letter-spacing: 0.5px;
+        }
+
+        .gpu-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* CTAs */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-tg {
+            background: linear-gradient(135deg, #00d2ff 0%, #0088cc 100%);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(0, 136, 204, 0.3);
+        }
+
+        .btn-gh {
+            background: #24292f;
+            border: 1px solid #333d4b;
+            color: #f0f6fc;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 12px 0 24px;
+            line-height: 1.5;
+        }
+
+        .footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <span class="badge">.llm hubs lab</span>
+        <h1>Калькулятор VRAM и KV-кэша</h1>
+        <p>Точный расчет памяти для инференса локальных моделей: веса, длина контекста (8K–128K), тип внимания и подбор GPU</p>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Модель нейросети</label>
+            <select id="modelSelect" onchange="calculate()">
+                <option value="llama-3.1-8b" selected>Llama 3.1 8B (GQA 8 KV, 32 слоя)</option>
+                <option value="qwen-2.5-7b">Qwen 2.5 7B (GQA 4 KV, 28 слоев)</option>
+                <option value="qwen-2.5-14b">Qwen 2.5 14B (GQA 8 KV, 48 слоев)</option>
+                <option value="qwen-2.5-32b">Qwen 2.5 32B (GQA 8 KV, 64 слоя)</option>
+                <option value="llama-3.3-70b">Llama 3.3 70B (GQA 8 KV, 80 слоев)</option>
+                <option value="mistral-large-123b">Mistral Large 123B (GQA 8 KV)</option>
+                <option value="deepseek-v3-671b">DeepSeek V3 / R1 671B (MLA 512d, MoE)</option>
+                <option value="gemma-2-9b">Gemma 2 9B (MHA - без GQA, 42 слоя)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Квантование весов</label>
+            <div class="grid-options" id="quantGroup">
+                <div class="opt-btn" onclick="setQuant('fp16')">FP16 / BF16</div>
+                <div class="opt-btn" onclick="setQuant('fp8')">FP8</div>
+                <div class="opt-btn active" onclick="setQuant('q4_k_m')">Q4_K_M (4-bit)</div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <span>Длина контекста (Токены)</span>
+                <span class="val-badge" id="contextLabel">8 192</span>
+            </label>
+            <input type="range" id="contextRange" min="2048" max="131072" step="2048" value="8192" oninput="updateContext(this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Квантование KV-кэша</label>
+            <div class="grid-options" id="kvGroup">
+                <div class="opt-btn active" onclick="setKVDtype('fp16')">FP16 (Дефолт)</div>
+                <div class="opt-btn" onclick="setKVDtype('fp8')">FP8 (2x сжатие)</div>
+                <div class="opt-btn" onclick="setKVDtype('q4')">Q4 (4x сжатие)</div>
+            </div>
+        </div>
+
+        <div class="results-box">
+            <div class="metric-row">
+                <span class="metric-name">Вес модели в VRAM:</span>
+                <span class="metric-val" id="weightsVal">4.8 ГБ</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-name">KV-кэш контекста:</span>
+                <span class="metric-val" id="kvVal">0.5 ГБ</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-name">CUDA Runtime & активации:</span>
+                <span class="metric-val" id="overheadVal">1.5 ГБ</span>
+            </div>
+            <div class="metric-row metric-total">
+                <span class="metric-name">Всего необходимо VRAM:</span>
+                <span class="metric-val" id="totalVal">6.8 ГБ</span>
+            </div>
+        </div>
+
+        <div class="gpu-recommendation">
+            <div class="gpu-icon">⚡</div>
+            <div class="gpu-info">
+                <span class="gpu-title">Рекомендуемая видеокарта:</span>
+                <span class="gpu-name" id="gpuVal">RTX 3060 12GB / RTX 4060 Ti 16GB</span>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="https://t.me/llm_hubs" target="_blank" class="btn btn-tg">
+                <span>📢 Подписаться на .llm hubs</span>
+            </a>
+            <a href="https://github.com/DangerousANEN/llm-vram-calculator" target="_blank" class="btn btn-gh">
+                <span>⭐ CLI-скрипт на GitHub</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="footer">
+        Разработано инженерной лабораторией <a href="https://t.me/llm_hubs" target="_blank">.llm hubs</a>.<br>
+        Честные бенчмарки, физика нейросетей и разборы архитектур без воды.
+    </div>
+</div>
+
+<script>
+    // Init Telegram WebApp
+    if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+    }
+
+    const MODELS = {
+        "llama-3.1-8b": { params: 8.03, layers: 32, kv_heads: 8, head_dim: 128, mla: false },
+        "qwen-2.5-7b": { params: 7.61, layers: 28, kv_heads: 4, head_dim: 128, mla: false },
+        "qwen-2.5-14b": { params: 14.7, layers: 48, kv_heads: 8, head_dim: 128, mla: false },
+        "qwen-2.5-32b": { params: 32.5, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
+        "llama-3.3-70b": { params: 70.6, layers: 80, kv_heads: 8, head_dim: 128, mla: false },
+        "mistral-large-123b": { params: 123.0, layers: 88, kv_heads: 8, head_dim: 128, mla: false },
+        "deepseek-v3-671b": { params: 671.0, layers: 61, kv_heads: 1, head_dim: 512, mla: true },
+        "gemma-2-9b": { params: 9.24, layers: 42, kv_heads: 16, head_dim: 256, mla: false }
+    };
+
+    let currentQuant = "q4_k_m";
+    let currentKVDtype = "fp16";
+    let currentContext = 8192;
+
+    function setQuant(q) {
+        currentQuant = q;
+        document.querySelectorAll("#quantGroup .opt-btn").forEach(btn => {
+            btn.classList.remove("active");
+            if (btn.innerText.toLowerCase().includes(q)) btn.classList.add("active");
+        });
+        calculate();
+    }
+
+    function setKVDtype(dtype) {
+        currentKVDtype = dtype;
+        document.querySelectorAll("#kvGroup .opt-btn").forEach(btn => {
+            btn.classList.remove("active");
+            if (btn.innerText.toLowerCase().includes(dtype)) btn.classList.add("active");
+        });
+        calculate();
+    }
+
+    function updateContext(val) {
+        currentContext = parseInt(val);
+        document.getElementById("contextLabel").innerText = currentContext.toLocaleString('ru-RU');
+        calculate();
+    }
+
+    function calculate() {
+        const modelId = document.getElementById("modelSelect").value;
+        const m = MODELS[modelId];
+
+        // 1. Weights
+        let bytesPerParam = 0.60; // Q4_K_M
+        if (currentQuant === "fp16") bytesPerParam = 2.0;
+        else if (currentQuant === "fp8") bytesPerParam = 1.0;
+        else if (currentQuant === "q4_k_m") bytesPerParam = 0.58;
+
+        const weightsGB = (m.params * 1e9 * bytesPerParam) / (1024**3);
+
+        // 2. KV Cache
+        let bytesPerElem = 2.0; // fp16
+        if (currentKVDtype === "fp8") bytesPerElem = 1.0;
+        else if (currentKVDtype === "q4") bytesPerElem = 0.5;
+
+        let kvBytes = 0;
+        if (m.mla) {
+            // MLA compressed KV
+            kvBytes = m.layers * m.head_dim * currentContext * bytesPerElem;
+        } else {
+            // GQA / MHA
+            kvBytes = 2 * m.layers * m.kv_heads * m.head_dim * currentContext * bytesPerElem;
+        }
+        const kvGB = kvBytes / (1024**3);
+
+        // 3. Overhead
+        let overheadGB = 1.5;
+        if (m.params > 60) overheadGB = 3.0;
+        else if (m.params > 30) overheadGB = 2.0;
+
+        const totalGB = weightsGB + kvGB + overheadGB;
+
+        // UI Update
+        document.getElementById("weightsVal").innerText = weightsGB.toFixed(1) + " ГБ";
+        document.getElementById("kvVal").innerText = kvGB.toFixed(2) + " ГБ";
+        document.getElementById("overheadVal").innerText = overheadGB.toFixed(1) + " ГБ";
+        document.getElementById("totalVal").innerText = totalGB.toFixed(1) + " ГБ";
+
+        // GPU match
+        let gpu = "RTX 3060 12GB";
+        if (totalGB <= 11.5) gpu = "RTX 3060 12GB / RTX 4060 Ti 16GB";
+        else if (totalGB <= 15.5) gpu = "RTX 4060 Ti 16GB / RTX 4080 16GB";
+        else if (totalGB <= 23.5) gpu = "RTX 3090 24GB / RTX 4090 24GB";
+        else if (totalGB <= 47.0) gpu = "2x RTX 3090 / 4090 (48 ГБ) или 1x A6000";
+        else if (totalGB <= 78.0) gpu = "1x A100 80GB / 4x RTX 3090";
+        else if (totalGB <= 150.0) gpu = "2x A100 80GB / H100 80GB";
+        else if (totalGB <= 320.0) gpu = "4x H100 80GB SXM";
+        else gpu = "8x H100 80GB SXM (Кластер инференса)";
+
+        document.getElementById("gpuVal").innerText = gpu;
+    }
+
+    calculate();
+</script>
+
+</body>
+</html>
