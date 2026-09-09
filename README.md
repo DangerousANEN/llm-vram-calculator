@@ -7,7 +7,8 @@
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
 
 > **🚀 Интерактивный WebApp калькулятор:** [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
-> **📢 Официальный инженерный канал:** [**.llm hubs**](https://t.me/llm_hubs) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
+> 📖 **Подробный лонгрид с математикой и формулами:** [Архитектура VRAM: почему падают локальные LLM (Telegraph)](https://telegra.ph/Arhitektura-VRAM-pochemu-padayut-lokalnye-LLM-i-kak-rasschitat-pamyat-09-09)  
+> 📢 **Официальный инженерный канал:** [**.llm hubs**](https://t.me/llm_hubs) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
 
 Легковесная автономная CLI-утилита без внешних зависимостей (pure Python stdlib) для:
 1. **Точного расчета видеопамяти (VRAM)** под любую открытую модель (7B–671B): веса модели ($M_{weights}$), аппетит динамического KV-кэша ($M_{kv}$), контекстные окна (4k–128k токенов), активации и оверхед CUDA.
