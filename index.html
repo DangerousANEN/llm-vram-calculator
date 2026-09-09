@@ -323,10 +323,12 @@
         <div class="form-group">
             <label>Модель нейросети</label>
             <select id="modelSelect" onchange="calculate()">
-                <option value="llama-3.1-8b" selected>Llama 3.1 8B (GQA 8 KV, 32 слоя)</option>
+                <option value="llama-3.1-8b">Llama 3.1 8B (GQA 8 KV, 32 слоя)</option>
                 <option value="qwen-2.5-7b">Qwen 2.5 7B (GQA 4 KV, 28 слоев)</option>
                 <option value="qwen-2.5-14b">Qwen 2.5 14B (GQA 8 KV, 48 слоев)</option>
+                <option value="qwen-3.8-27b">Qwen 3.8 27B (GQA 8 KV, 64 слоя - New)</option>
                 <option value="qwen-2.5-32b">Qwen 2.5 32B (GQA 8 KV, 64 слоя)</option>
+                <option value="deepseek-r1-distill-32b">DeepSeek R1 Distill 32B (Reasoning)</option>
                 <option value="llama-3.3-70b">Llama 3.3 70B (GQA 8 KV, 80 слоев)</option>
                 <option value="mistral-large-123b">Mistral Large 123B (GQA 8 KV)</option>
                 <option value="deepseek-v3-671b">DeepSeek V3 / R1 671B (MLA 512d, MoE)</option>
@@ -388,6 +390,9 @@
         </div>
 
         <div class="actions">
+            <button onclick="shareToTelegram()" class="btn btn-share" style="background: rgba(0, 210, 255, 0.15); border: 1px solid #00d2ff; color: #00d2ff;">
+                <span>🚀 Поделиться расчетом в Telegram</span>
+            </button>
             <a href="https://t.me/llm_hubs" target="_blank" class="btn btn-tg">
                 <span>📢 Подписаться на .llm hubs</span>
             </a>
@@ -414,7 +419,9 @@
         "llama-3.1-8b": { params: 8.03, layers: 32, kv_heads: 8, head_dim: 128, mla: false },
         "qwen-2.5-7b": { params: 7.61, layers: 28, kv_heads: 4, head_dim: 128, mla: false },
         "qwen-2.5-14b": { params: 14.7, layers: 48, kv_heads: 8, head_dim: 128, mla: false },
+        "qwen-3.8-27b": { params: 27.2, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
         "qwen-2.5-32b": { params: 32.5, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
+        "deepseek-r1-distill-32b": { params: 32.8, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
         "llama-3.3-70b": { params: 70.6, layers: 80, kv_heads: 8, head_dim: 128, mla: false },
         "mistral-large-123b": { params: 123.0, layers: 88, kv_heads: 8, head_dim: 128, mla: false },
         "deepseek-v3-671b": { params: 671.0, layers: 61, kv_heads: 1, head_dim: 512, mla: true },
@@ -501,6 +508,23 @@
         else gpu = "8x H100 80GB SXM (Кластер инференса)";
 
         document.getElementById("gpuVal").innerText = gpu;
+    }
+
+    function shareToTelegram() {
+        const sel = document.getElementById("modelSelect");
+        const modelName = sel.options[sel.selectedIndex].text.split("(")[0].trim();
+        const totalGB = document.getElementById("totalVal").innerText;
+        const gpu = document.getElementById("gpuVal").innerText;
+        const text = encodeURIComponent(
+            `⚡ Расчет VRAM для ${modelName}:\n` +
+            `• Контекст: ${currentContext.toLocaleString()} токенов\n` +
+            `• Квантование: ${currentQuant.toUpperCase()} (KV: ${currentKVDtype.toUpperCase()})\n` +
+            `• Требуется памяти: ${totalGB}\n` +
+            `• Рекомендуемая GPU: ${gpu}\n\n` +
+            `Калькулятор VRAM от инженерного канала @llm_hubs:`
+        );
+        const url = encodeURIComponent("https://dangerousanen.github.io/llm-vram-calculator/");
+        window.open(`https://t.me/share/url?url=${url}&text=${text}`, "_blank");
     }
 
     calculate();
