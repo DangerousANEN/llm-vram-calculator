@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
 
-> **🚀 Интерактивный WebApp калькулятор:** [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
+> **🚀 Интерактивный WebApp калькулятор:** [ai.zxc1x1.ru/tools/vram](https://ai.zxc1x1.ru/tools/vram) · [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
 > 📖 **Подробный лонгрид с математикой и формулами:** [Архитектура VRAM: почему падают локальные LLM (Telegraph)](https://telegra.ph/Arhitektura-VRAM-pochemu-padayut-lokalnye-LLM-i-kak-rasschitat-pamyat-09-09)  
 > 📢 **Официальный инженерный канал:** [**.llm hubs**](https://t.me/llm_hubs) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
 
