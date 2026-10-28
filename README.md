@@ -1,14 +1,14 @@
 # ⚡ LLM VRAM Calculator & Inference Speedtest
 
-[![Telegram](https://img.shields.io/badge/Telegram-.llm%20hubs-0088cc?logo=telegram&style=for-the-badge)](https://t.me/llm_hubs)
+[![Telegram](https://img.shields.io/badge/Telegram-@zexkora__hub-0088cc?logo=telegram&style=for-the-badge)](https://t.me/zexkora_hub)
 [![Live WebApp](https://img.shields.io/badge/Live_WebApp-Interactive_Calc-00d2ff?style=for-the-badge)](https://dangerousanen.github.io/llm-vram-calculator/)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
 
 > **🚀 Интерактивный WebApp калькулятор:** [ai.zxc1x1.ru/tools/vram](https://ai.zxc1x1.ru/tools/vram) · [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
-> 📖 **Подробный лонгрид с математикой и формулами:** [Архитектура VRAM: почему падают локальные LLM (Telegraph)](https://telegra.ph/Arhitektura-VRAM-pochemu-padayut-lokalnye-LLM-i-kak-rasschitat-pamyat-09-09)  
-> 📢 **Официальный инженерный канал:** [**.llm hubs**](https://t.me/llm_hubs) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
+> 📖 **Подробный лонгрид с математикой и формулами:** [Локальные LLM в 2026: рантаймы, расчет VRAM и ловушка KV-кэша (Telegraph)](https://telegra.ph/Lokalnye-LLM-v-2026-rantajmy-raschet-VRAM-i-lovushka-KV-kehsha-10-28)  
+> 📢 **Официальный инженерный канал:** [**@zexkora_hub**](https://t.me/zexkora_hub) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
 
 Легковесная автономная CLI-утилита без внешних зависимостей (pure Python stdlib) для:
 1. **Точного расчета видеопамяти (VRAM)** под любую открытую модель (7B–671B): веса модели ($M_{weights}$), аппетит динамического KV-кэша ($M_{kv}$), контекстные окна (4k–128k токенов), активации и оверхед CUDA.
@@ -128,7 +128,7 @@ python vram_calc.py bench --url http://localhost:11434/v1 --model qwen2.5:7b
 
 Больше практических инженерных гайдов, разборов архитектур нейросетей, бенчмарков железа и свежих открытых инструментов — в Telegram-канале:
 
-👉 **[Подписаться на .llm hubs (@llm_hubs)](https://t.me/llm_hubs)**
+👉 **[Подписаться на Zexkora Hub (@zexkora_hub)](https://t.me/zexkora_hub)**
 
 ---
 
