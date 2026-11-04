@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
 
-> **🚀 Интерактивный WebApp калькулятор:** [ai.zxc1x1.ru/tools/vram](https://ai.zxc1x1.ru/tools/vram) · [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/)  
+> **🚀 Интерактивный WebApp калькулятор:** [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/) (работает в браузере, без установки)  
 > 📖 **Подробный лонгрид с математикой и формулами:** [Локальные LLM в 2026: рантаймы, расчет VRAM и ловушка KV-кэша (Telegraph)](https://telegra.ph/Lokalnye-LLM-v-2026-rantajmy-raschet-VRAM-i-lovushka-KV-kehsha-10-28)  
 > 📢 **Официальный инженерный канал:** [**@zexkora_hub**](https://t.me/zexkora_hub) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
 
