@@ -222,6 +222,7 @@
     fillQuants(currentModel());
     el.quant.value = state.quant;
     el.ctx.value = String(state.context);
+    el.ctxRange.max = String(S.maxContextOf(currentModel()));
     el.ctxRange.value = String(Math.min(state.context, parseInt(el.ctxRange.max, 10)));
     el.batch.value = String(state.batch);
     el.kvDtype.value = state.kvDtype;

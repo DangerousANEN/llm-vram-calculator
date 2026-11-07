@@ -229,6 +229,14 @@ def test_model_and_quant_change_recomputes_and_updates_url(page):
     assert get_model("qwen3-8b")["source"]["revision"][:12] in page.inner_text("#prov")
 
 
+def test_shared_context_slider_matches_numeric_field(page, server):
+    page.goto(f"{server}?m=qwen3-8b&q=q4_k_m&c=32768&b=1")
+    page.wait_for_selector("#out-total")
+    assert page.input_value("#ctx") == "32768"
+    assert page.input_value("#ctxRange") == "32768"
+    assert page.get_attribute("#ctxRange", "max") == "40960"
+
+
 def test_share_url_reload_restores_parameters(page, server):
     page.goto(f"{server}?m=qwen3-8b&q=q4_k_m&c=40960&b=4&o=2&k=bf16")
     page.wait_for_selector("#out-total")
