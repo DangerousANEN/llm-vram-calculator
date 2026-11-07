@@ -33,7 +33,7 @@ jobs:
       - name: Node URL-state tests
         run: |
           node --version
-          node tests/node/state.test.cjs || python -c "import sys; print('node missing', sys.version)"
+          node tests/node/state.test.cjs
       - name: Static site is up to date
         run: python scripts/build_web.py --check
 
@@ -60,6 +60,10 @@ jobs:
   ui:
     name: headless UI (chromium + firefox)
     runs-on: ubuntu-latest
+    env:
+      # Both browsers are mandatory: a launch failure must fail the job, never
+      # silently skip a whole browser (the previous revision skipped Firefox).
+      UI_REQUIRE_BROWSERS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

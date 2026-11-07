@@ -92,6 +92,26 @@ def test_readme_documents_limits_formula_and_tests():
     assert "python -m vram_calc" in text
 
 
+def test_page_ships_no_telemetry_or_tracking():
+    """The UI stays analytics-free: no beacon, no third-party collector."""
+    html = INDEX.read_text(encoding="utf-8").lower()
+    for needle in (
+        "google-analytics",
+        "googletagmanager",
+        "gtag(",
+        "yandex_metrika",
+        "mc.yandex",
+        "sentry",
+        "posthog",
+        "mixpanel",
+        "sendbeacon",
+        "navigator.sendbeacon",
+        "/collect?",
+        "new image().src",
+    ):
+        assert needle not in html, f"unexpected tracking surface: {needle}"
+
+
 def test_readme_has_no_fake_precision_claims():
     text = README.read_text(encoding="utf-8").lower()
     # a guarantee claim is only acceptable when explicitly negated

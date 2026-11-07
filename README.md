@@ -90,7 +90,7 @@ vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 - Всё в GiB, байты печатаются точно (`4683073632 B`).
 - Веса: `bf16`/`fp16` — точная сумма официальных safetensors-шардов; `q4_k_m`, `q5_k_m`, `q6_k`, `q8_0` и др. — точная сумма официальных GGUF-файлов. Если официального файла нужного кванта нет, CLI откажется и предложит `--allow-estimate`, который выдаёт **помеченную** оценку по байт-на-параметр.
 - KV: только `fp16`/`bf16`, оба по 2 байта на элемент.
-- Runtime overhead: `unknown_not_estimated`. Ручной запас добавляется как `manual_bound`.
+- Runtime overhead: `unknown_not_estimated`. В JSON это `bytes: null` / `gib: null` + `"unknown": true` — это именно «неизвестно», а не измеренный ноль. Ручной запас добавляется как `manual_bound` (явный `0` остаётся явным нулём и так и подписан).
 
 ## CLI
 
@@ -98,7 +98,8 @@ vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 python -m vram_calc models                  # модели, ревизии, точные кванты
 python -m vram_calc calc --help
 python -m vram_calc calc --model ... --quant ... --ctx ... [--batch N] [--kv-dtype fp16|bf16] [--overhead-gib X] [--json]
-python -m vram_calc bench --url http://127.0.0.1:8000/v1 --model local-model
+# bench ВРЕМЕННО ОТКЛЮЧЁН: сетевого пробника в этом релизе нет (код выхода 2, benchmark_disabled)
+python -m vram_calc bench --help
 ```
 
 ### Миграция со старого `--params`
@@ -116,14 +117,20 @@ error [legacy_params_removed]: ... Use --model qwen2.5-7b-instruct ...
 python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic
 ```
 
-### Бенчмарк: чанки — это не токены
+### Бенчмарк: временно отключён
 
-Прошлая версия считала SSE-чанки и печатала их как tokens/s. Чанк может содержать один токен, половину или десять, поэтому теперь:
+Релиз 2.0 — это калькулятор памяти, а не тест скорости. Старый потоковый
+пробник убран после ревью безопасности: он ходил на произвольный пользовательский
+URL через `urllib`, **шёл по редиректам и вёл за собой заголовок
+`Authorization`**, считал tokens/s как `(N-1)/(последний чанк − первый чанк)` и
+принимал обрезанный/битый SSE за успех, а общий таймаут проверялся только между
+чанками.
 
-- запрос идёт с `stream_options.include_usage: true`;
-- `tokens/s` печатается **только** если сервер вернул `usage.completion_tokens` (поле `tps` в JSON, `tps_basis` объясняет базу);
-- если usage нет — `tps: null` и причина `provider_did_not_report_usage`, а сырой поток выводится как `chunk_rate_per_s` с подписью «stream chunks/s — NOT tokens/s»;
-- TPS никогда не досчитывается из чанков.
+Поэтому в этом релизе **нет сетевого кода бенчмарка вообще**: `bench`
+немедленно отказывает с кодом `benchmark_disabled` (код выхода 2) и печатает
+команду миграции. Никаких запросов, никаких платных вызовов и никаких заявлений
+о «рабочем tokens/s». Корректный ограниченный локальный пробник требует
+отдельного редизайна и в этот релиз не входит.
 
 ## Веб-интерфейс
 
@@ -144,12 +151,17 @@ python scripts/build_web.py --check  # проверить, что коммит �
 ## Тесты
 
 ```bash
-python -m pytest -m "not ui"              # формулы, отказы, каталог, CLI, bench, статика
+python -m pytest -m "not ui"              # формулы, отказы, каталог, CLI, bench-отказ, статика
 node tests/node/state.test.cjs            # валидация URL-state + сверка чисел JS ↔ Python
-python -m pytest -m ui tests/test_ui.py   # headless chromium + firefox, скриншоты в validation/screenshots
+python -m pytest -m ui tests/test_ui.py   # headless chromium + firefox (оба обязательны), скриншоты в validation/screenshots
 ```
 
-Покрыто: точные байты весов против официальных листингов, `kv_bytes_per_token` (57344 B для Qwen2.5-7B, 147456 B для Qwen3-8B), отказы по MoE/MLA/sliding window/гибриду/неизвестной архитектуре, границы контекста и batch, помеченные оценки, CLI exit-коды и миграция, честность bench (usage / без usage / HTTP 500), совпадение чисел Python и JS, валидация URL и копирование/шеринг в реальном браузере.
+UI-тесты требуют **оба** браузера: если chromium или firefox не запускается,
+модуль падает (`pytest.fail`), а не тихо пропускается — иначе целый браузер
+может выпасть из проверки незаметно. Локальное послабление возможно только
+явным `UI_ALLOW_MISSING_BROWSERS=1`; CI его не выставляет.
+
+Покрыто: точные байты весов против официальных листингов, `kv_bytes_per_token` (57344 B для Qwen2.5-7B, 147456 B для Qwen3-8B), отказы по MoE/MLA/sliding window/гибриду/неизвестной архитектуре, границы контекста и batch, помеченные оценки, CLI exit-коды и миграция, отсутствие сетевого бенчмарка (сервер видит ноль запросов), явная семантика неизвестного overhead, поведенческая регрессия против legacy `calculate_vram`, совпадение чисел Python и JS, валидация URL и копирование/шеринг в реальном браузере (включая чтение настоящего буфера обмена в Firefox).
 
 Сборка пакета и smoke из чистого окружения:
 
@@ -159,7 +171,7 @@ python -m venv /tmp/venv && /tmp/venv/bin/pip install dist/*.whl
 /tmp/venv/bin/vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192 --json
 ```
 
-CI (`.github/workflows/ci.yml`) гоняет юнит-тесты на Python 3.9/3.11/3.13, node-тесты, проверку актуальности `index.html`, сборку wheel + smoke из чистого venv и UI-тесты в chromium и firefox.
+CI (`.github/workflows/ci.yml`) гоняет юнит-тесты на Python 3.9/3.11/3.13, node-тесты (без «мягкого» fallback), проверку актуальности `index.html`, сборку wheel + smoke из чистого venv и UI-тесты в chromium и firefox; отсутствие любого из обязательных браузеров валит джобу.
 
 ## Чего в этом релизе нет
 

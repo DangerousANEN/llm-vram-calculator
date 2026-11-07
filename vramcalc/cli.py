@@ -33,7 +33,9 @@ examples:
   python -m vram_calc models
   python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
   python -m vram_calc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --json
-  python -m vram_calc bench --url http://127.0.0.1:8080/v1 --model local-model
+
+note: the `bench` subcommand is temporarily disabled in this release (no network
+      probe is shipped); it refuses with a migration hint instead of measuring.
 """
 
 
@@ -90,7 +92,16 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--cpu-offload-gib", type=float, default=None, help="REMOVED: offload is not modelled")
     c.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine readable output")
 
-    b = sub.add_parser("bench", help="streaming latency/throughput probe (token rate only when reported)")
+    b = sub.add_parser(
+        "bench",
+        help="TEMPORARILY DISABLED: the streaming probe is not shipped in this release",
+        description=(
+            "TEMPORARILY DISABLED. The old streaming probe was removed after a release-safety review and "
+            "this release ships no network-capable benchmark: `bench` refuses immediately with the code "
+            "`benchmark_disabled` (exit 2) and a migration hint. A correct bounded local probe needs a "
+            "redesign and is not part of this release."
+        ),
+    )
     b.add_argument("--url", default="http://127.0.0.1:8000/v1", help="OpenAI-compatible base URL")
     b.add_argument("--model", default="local-model", help="model name for the request")
     b.add_argument("--prompt", default=DEFAULT_PROMPT)
@@ -154,11 +165,13 @@ def _print_ledger(d: dict) -> None:
     print(f" KV cache          : {_gib(d['kv_cache']['bytes']):>12}"
           f"  ({d['kv_cache']['bytes']} bytes, {d['kv_cache']['bytes_per_token']} B/token/sequence)")
     print(f" subtotal          : {_gib(d['subtotal']['bytes']):>12}  (weights + KV)")
-    print(
-        f" runtime overhead  : {_gib(d['runtime_overhead']['bytes']):>12}  ({d['runtime_overhead']['kind']})"
-    )
-    if d["runtime_overhead"]["label"]:
-        print(f"   {d['runtime_overhead']['label']}")
+    overhead = d["runtime_overhead"]
+    if overhead["bytes"] is None:
+        print(f" runtime overhead  : {'unknown':>12}  ({overhead['kind']})")
+    else:
+        print(f" runtime overhead  : {_gib(overhead['bytes']):>12}  ({overhead['kind']})")
+    if overhead["label"]:
+        print(f"   {overhead['label']}")
     print(f" LEDGER TOTAL      : {_gib(d['ledger_total']['bytes']):>12}  (arithmetic sum, NOT measured VRAM)")
     print("-" * 68)
     print(" limits:")
@@ -245,33 +258,12 @@ def _cmd_calc(args) -> int:
 
 
 def _cmd_bench(args) -> int:
-    import os
-
-    api_key = args.api_key or os.environ.get("VRAM_CALC_API_KEY")
-    res = run_bench(args.url, args.model, args.prompt, args.tokens, api_key=api_key)
-    if args.json:
-        print(json.dumps(res, indent=2, ensure_ascii=False))
-        return 0
-    print()
-    print("=" * 68)
-    print(f" Streaming probe: {res['model']}")
-    print("=" * 68)
-    print(f" endpoint          : {res['url']}")
-    print(f" TTFT              : {res['ttft_ms']} ms" if res["ttft_ms"] is not None else " TTFT              : n/a")
-    if res["tps"] is not None:
-        print(f" tokens/s          : {res['tps']}   basis: {res['tps_basis']}")
-    else:
-        print(f" tokens/s          : not claimed - {res['tps_unavailable_reason']}")
-    print(f" completion tokens : {res['completion_tokens']} (provider reported)")
-    print(f" stream chunks     : {res['stream_chunks']}   chunk rate: {res['chunk_rate_per_s']} "
-          f"{res['chunk_rate_label']}")
-    print(f" total wall time   : {res['total_time_s']} s")
-    print("-" * 68)
-    for w in res["warnings"]:
-        print(f" ! {w}")
-    print("=" * 68)
-    print()
-    return 0
+    # The probe is disabled in this release: run_bench always raises
+    # BenchmarkError(code="benchmark_disabled"), which main() turns into exit 2.
+    # The legacy flags are still accepted so old invocations fail with a
+    # migration hint instead of an "unrecognised argument" error.
+    run_bench(args.url, args.model, args.prompt, args.tokens, api_key=args.api_key)
+    return 0  # pragma: no cover - unreachable while the probe is disabled
 
 
 def main(argv=None) -> int:

@@ -1,66 +1,59 @@
 # -*- coding: utf-8 -*-
-"""Benchmark honesty: chunks are not tokens.
+"""Benchmark honesty: the network probe is DISABLED in this release.
 
-A local fake OpenAI-compatible server streams SSE so the tests never touch a
-real provider and never invent throughput numbers.
+The previous implementation streamed from an arbitrary user-supplied URL with
+``urllib`` (following redirects, forwarding a bearer token), computed tokens/s
+from ``(N-1)/first_to_last_chunk`` and treated incomplete SSE as success. The
+release review scoped bench out of 2.0.0, so the module must now refuse with a
+structured ``benchmark_disabled`` error and must not be able to touch the
+network at all.
+
+These tests prove the *absence* of a probe:
+
+* the CLI exits 2 with a machine-readable ``benchmark_disabled`` code;
+* a live local server observes ZERO requests (no network reachable);
+* the module carries no HTTP/socket transport and cannot be re-enabled by
+  accident without failing here.
 """
 from __future__ import annotations
 
 import json
+import os
+import pathlib
+import subprocess
+import sys
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from vramcalc.bench import run_bench
+from vramcalc.bench import DEFAULT_PROMPT, run_bench
 from vramcalc.errors import BenchmarkError
 
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-class _Handler(BaseHTTPRequestHandler):
-    mode = "usage"  # "usage" | "no_usage" | "http_500"
-    seen_payload = {}
 
-    def log_message(self, format, *args):  # noqa: A002 - silence the test output
+class _CountingHandler(BaseHTTPRequestHandler):
+    requests = 0
+
+    def log_message(self, *args):  # noqa: A002 - silence the test output
         return
 
     def do_POST(self):  # noqa: N802
-        length = int(self.headers.get("Content-Length") or 0)
-        body = json.loads(self.rfile.read(length) or b"{}")
-        _Handler.seen_payload = body
-        if _Handler.mode == "http_500":
-            payload = b'{"error": {"message": "boom"}}'
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-            return
-
-        assert body.get("stream") is True
-        assert body.get("stream_options", {}).get("include_usage") is True, "must request real token usage"
-
+        _CountingHandler.requests += 1
         self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        # a real server has a non-zero inter-token interval; without it a
-        # sub-millisecond window would be honestly reported as unmeasurable
-        for i in range(5):
-            chunk = {"choices": [{"delta": {"content": f"tok{i} "}}]}
-            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
-            self.wfile.flush()
-            time.sleep(0.005)
-        final = {"choices": [], "usage": {"prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16}}
-        if _Handler.mode == "no_usage":
-            final.pop("usage")
-        self.wfile.write(f"data: {json.dumps(final)}\n\n".encode())
-        self.wfile.write(b"data: [DONE]\n\n")
-        self.wfile.flush()
+
+    def do_GET(self):  # noqa: N802
+        _CountingHandler.requests += 1
+        self.send_response(200)
+        self.end_headers()
 
 
 @pytest.fixture()
 def server():
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    _CountingHandler.requests = 0
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHandler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
@@ -70,63 +63,63 @@ def server():
         httpd.server_close()
 
 
-def test_usage_reported_means_tokens_per_second(server):
-    _Handler.mode = "usage"
-    res = run_bench(server, "test-model", max_tokens=16)
-    assert res["completion_tokens"] == 5
-    assert res["stream_chunks"] == 5
-    assert res["tps"] is not None and res["tps"] > 0
-    assert res["tps_basis"].startswith("provider_reported_usage")
-    assert "NOT tokens/s" in res["chunk_rate_label"]
+def run(*args):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT)
+    return subprocess.run(
+        [sys.executable, "-m", "vramcalc", *args],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
-def test_missing_usage_never_fabricates_tps(server):
-    _Handler.mode = "no_usage"
-    res = run_bench(server, "test-model", max_tokens=16)
-    assert res["tps"] is None
-    assert res["completion_tokens"] is None
-    assert "not tokens" in res["tps_unavailable_reason"]
-    assert res["stream_chunks"] == 5
-    assert res["chunk_rate_per_s"] is not None
-    assert "NOT tokens/s" in res["chunk_rate_label"]
-
-
-def test_request_asks_for_usage_and_streaming(server):
-    _Handler.mode = "usage"
-    run_bench(server, "test-model")
-    assert _Handler.seen_payload["stream"] is True
-    assert _Handler.seen_payload["stream_options"] == {"include_usage": True}
-
-
-def test_http_error_is_reported_not_swallowed(server):
-    _Handler.mode = "http_500"
+def test_run_bench_refuses_offline_without_touching_the_network():
     with pytest.raises(BenchmarkError) as exc:
-        run_bench(server, "test-model")
-    assert exc.value.code == "benchmark_http_error"
+        run_bench("http://127.0.0.1:9/v1", "m")
+    assert exc.value.code == "benchmark_disabled"
+    assert "disabled" in exc.value.message.lower()
+    # a migration command must be offered instead of a probe
+    assert exc.value.details.get("migration")
 
 
-@pytest.mark.parametrize("url", ["", "ftp://x", "example.com", None])
-def test_invalid_url_is_refused(url):
+def test_run_bench_still_accepts_the_legacy_signature_for_migration():
+    # tolerated old invocation shapes must raise benchmark_disabled, not TypeError
     with pytest.raises(BenchmarkError) as exc:
-        run_bench(url, "m")
-    assert exc.value.code == "invalid_url"
+        run_bench(base_url="http://127.0.0.1:8000/v1", model="local-model", prompt=DEFAULT_PROMPT, max_tokens=120)
+    assert exc.value.code == "benchmark_disabled"
 
 
-@pytest.mark.parametrize("tokens", [0, -1, 100000, "10", 1.5])
-def test_invalid_max_tokens_is_refused(server, tokens):
-    with pytest.raises(BenchmarkError) as exc:
-        run_bench(server, "m", max_tokens=tokens)
-    assert exc.value.code == "invalid_max_tokens"
+def test_bench_cli_receives_zero_requests_and_exits_two(server):
+    res = run("bench", "--url", server, "--model", "local-model", "--json")
+    assert res.returncode == 2, res.stdout + res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["error"] == "benchmark_disabled"
+    assert payload["details"].get("migration")
+    # the decisive evidence: the endpoint saw nothing at all
+    assert _CountingHandler.requests == 0, f"bench reached the network: {_CountingHandler.requests} requests"
 
 
-def test_unreachable_host_is_reported():
-    with pytest.raises(BenchmarkError) as exc:
-        run_bench("http://127.0.0.1:9/v1", "m", timeout=2)
-    assert exc.value.code in {"benchmark_unreachable", "benchmark_http_error"}
+def test_bench_cli_text_error_names_the_migration():
+    res = run("bench", "--url", "http://127.0.0.1:8000/v1", "--model", "m")
+    assert res.returncode == 2
+    assert "benchmark_disabled" in res.stderr
+    assert "--model" in res.stderr
 
 
-def test_sample_output_is_truncated(server):
-    _Handler.mode = "usage"
-    res = run_bench(server, "m", max_tokens=8)
-    assert len(res["sample_output"]) <= 165
-    assert res["sample_output"].startswith("tok0")
+def test_bench_module_has_no_network_transport():
+    import vramcalc.bench as bench
+
+    for forbidden in ("urllib", "socket", "http", "requests"):
+        assert not hasattr(bench, forbidden), f"bench must not expose {forbidden}"
+    source = (ROOT / "vramcalc" / "bench.py").read_text(encoding="utf-8")
+    for token in ("urlopen", "urllib.request", "socket.socket", "http.client"):
+        assert token not in source, f"bench source still carries transport: {token}"
+
+
+def test_bench_help_says_the_probe_is_disabled():
+    res = run("bench", "--help")
+    assert res.returncode == 0
+    assert "disabled" in res.stdout.lower()

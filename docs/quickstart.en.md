@@ -47,7 +47,7 @@ Sample output (trimmed):
  geometry          : 28 layers x 4 KV heads x 128 head_dim
  weights           :        4.362 GiB  (4683073632 bytes)
  KV cache          :        0.438 GiB  (469762048 bytes, 57344 B/token/sequence)
- runtime overhead  :        0.000 GiB  (unknown_not_estimated)
+ runtime overhead  :      unknown  (unknown_not_estimated)
  LEDGER TOTAL      :        4.799 GiB  (arithmetic sum, NOT measured VRAM)
 ```
 
@@ -107,24 +107,34 @@ on stderr (or a JSON object with `error` when `--json` is used).
 
 CUDA context, allocator fragmentation, activations, workspaces, CUDA graphs and
 paged-attention padding are runtime dependent. This tool reports them as
-`unknown_not_estimated`. If you measured a value on your own stack, add it with
-`--overhead-gib`; the result labels it as `manual_bound`.
+`unknown_not_estimated`, with `bytes`/`gib` set to `null` and `"unknown": true` -
+an explicit unknown, never a measured zero. If you measured a value on your own
+stack, add it with `--overhead-gib`; the result labels it as `manual_bound`
+(an explicit `0` stays an explicit zero bound and is labelled as such).
 
 `verification.gpu_runtime_checked` is always `false` in this release: no GPU run
 was performed. Treat the ledger as an accounting model, not a measurement.
 
-## Benchmark
+## Benchmark - temporarily disabled
+
+The 2.0 release is a memory calculator, not a speed test. The old streaming
+probe was removed after a release-safety review: it streamed from an arbitrary
+user-supplied URL with `urllib`, followed redirects while forwarding the
+`Authorization` header, reported tokens/s as `(N-1)/(last chunk - first chunk)`,
+treated truncated or malformed SSE as success, and only checked its overall
+deadline between chunks.
+
+This release therefore ships **no network benchmark code at all**:
 
 ```bash
-python -m vram_calc bench --url http://127.0.0.1:8000/v1 --model local-model
-export VRAM_CALC_API_KEY=...   # optional bearer token
+$ python -m vram_calc bench --url http://127.0.0.1:8000/v1 --model local-model
+error [benchmark_disabled]: ... exit code 2, with a migration command
 ```
 
-The probe requests `stream_options.include_usage = true` and reports
-`tokens/s` only when the server returns `usage.completion_tokens`. Otherwise
-`tps` is `null`, the reason is `provider_did_not_report_usage`, and the raw
-stream rate is reported as `chunk_rate_per_s`, explicitly labelled
-"stream chunks/s — NOT tokens/s". Stream chunks are never converted into tokens.
+`run_bench` refuses immediately, a live endpoint observes zero requests, and no
+tokens/s figure is claimed anywhere. A correct bounded local probe (pinned
+endpoint, no redirect following, explicit stream terminator, wall-clock
+deadline) requires a redesign and is not part of this release.
 
 ## Web UI
 
@@ -146,8 +156,13 @@ requires an account or a subscription, and it sends nothing automatically.
 ```bash
 python -m pytest -m "not ui"
 node tests/node/state.test.cjs
-python -m pytest -m ui tests/test_ui.py     # needs playwright + chromium/firefox
+python -m pytest -m ui tests/test_ui.py     # needs playwright + chromium AND firefox
 ```
+
+Both UI browsers are required: if chromium or firefox cannot be launched the UI
+module fails instead of skipping, so a whole browser cannot silently drop out of
+verification. `UI_ALLOW_MISSING_BROWSERS=1` is a local-only opt-out; CI never
+sets it.
 
 Package build and smoke test:
 

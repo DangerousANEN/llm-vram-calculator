@@ -1,19 +1,32 @@
 # -*- coding: utf-8 -*-
-"""Headless UI tests (Playwright: chromium, and firefox when available).
+"""Headless UI tests (Playwright: chromium + firefox).
 
 Run inside the isolated sandbox only:
 
     python -m pytest -m ui tests/test_ui.py
 
-Real browser screenshots are written to ``validation/screenshots``; they are
-inspection evidence, never a substitute for the DOM assertions here.
+Both browsers are REQUIRED: the previous revision silently skipped the whole
+Firefox suite, which hid a real ``Unknown permission: clipboard-read`` crash.
+If a required browser cannot be launched the module now FAILS instead of
+skipping, unless ``UI_ALLOW_MISSING_BROWSERS=1`` is set explicitly (local
+dev only - CI must never set it).
+
+Clipboard: chromium grants ``clipboard-read``/``clipboard-write``. Firefox has
+no such permission - it would raise ``Unknown permission: clipboard-read`` - so
+it is launched with Firefox's own async-clipboard test preference
+(``dom.events.testing.asyncClipboard``) which lets *real* ``navigator.clipboard``
+reads work without stubbing any production code.
+
+Real browser screenshots are written to ``validation/screenshots`` for both
+Chromium and Firefox; they are inspection evidence, never a substitute for the
+DOM assertions here.
 """
 from __future__ import annotations
 
 import functools
 import http.server
-import json
 import os
+import pathlib
 import socketserver
 import threading
 
@@ -21,13 +34,33 @@ import pytest
 
 pytestmark = pytest.mark.ui
 
-pytest.importorskip("playwright.sync_api", reason="playwright is only installed in the UI sandbox")
-from playwright.sync_api import sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - exercised only without playwright
+    if os.environ.get("UI_REQUIRE_BROWSERS") == "1":
+        raise
+    pytest.importorskip("playwright.sync_api", reason="playwright is only installed in the UI sandbox")
 
 from vramcalc.core import compute_ledger  # noqa: E402
 from vramcalc.catalog import get_model  # noqa: E402
 
 GIB = 1024 ** 3
+
+REQUIRED_BROWSERS = ("chromium", "firefox")
+
+# Per-browser launch options. Chromium needs the sandbox flags; Firefox needs its
+# test-only async clipboard preference (there is no clipboard-read permission).
+LAUNCH_OPTIONS = {
+    "chromium": {"args": ["--no-sandbox", "--disable-dev-shm-usage"]},
+    "firefox": {"firefox_user_prefs": {"dom.events.testing.asyncClipboard": True}},
+}
+# Chromium-only context permissions; Firefox rejects them outright.
+CONTEXT_PERMISSIONS = {"chromium": ["clipboard-read", "clipboard-write"]}
+
+SYSTEM_BROWSERS = {
+    "chromium": ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"],
+    "firefox": ["/usr/bin/firefox-esr", "/usr/bin/firefox"],
+}
 
 
 def fmt_gib(nbytes: int) -> str:
@@ -41,7 +74,7 @@ def fmt_gib(nbytes: int) -> str:
 
 @pytest.fixture(scope="module")
 def server():
-    root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    root = pathlib.Path(__file__).resolve().parents[1]
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
     handler.log_message = lambda *a, **k: None  # type: ignore[assignment]
 
@@ -58,48 +91,50 @@ def server():
         httpd.server_close()
 
 
-SYSTEM_BROWSERS = {
-    "chromium": ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"],
-    "firefox": ["/usr/bin/firefox-esr", "/usr/bin/firefox"],
-}
-
-
 def _launch(browser_type, name):
-    """Try the Playwright-bundled build first, then a system binary.
-
-    The sandbox image ships /usr/bin/chromium (and Firefox when available); the
-    bundled downloads are not required.
-    """
-    args = ["--no-sandbox", "--disable-dev-shm-usage"] if name == "chromium" else []
+    """Try the Playwright-bundled build first, then a system binary."""
+    options = dict(LAUNCH_OPTIONS.get(name, {}))
     try:
-        return browser_type.launch(args=args)
+        return browser_type.launch(**options)
     except Exception as first:
+        last = None
         for candidate in SYSTEM_BROWSERS.get(name, []):
             if not os.path.exists(candidate):
                 continue
             try:
-                return browser_type.launch(executable_path=candidate, args=args)
+                return browser_type.launch(executable_path=candidate, **options)
             except Exception as exc:
                 last = exc
         print(f"[ui] {name} unavailable: {first}")
-        if SYSTEM_BROWSERS.get(name):
-            print(f"[ui] {name} system fallback failed: {locals().get('last')}")
+        if last is not None:
+            print(f"[ui] {name} system fallback failed: {last}")
         return None
 
 
 @pytest.fixture(scope="module")
 def browsers():
+    """Launch every REQUIRED browser; fail (not skip) when one is missing."""
+    allow_missing = os.environ.get("UI_ALLOW_MISSING_BROWSERS") == "1"
     with sync_playwright() as pw:
-        started = {}
-        for name in ("chromium", "firefox"):
+        started: dict = {}
+        missing: list = []
+        for name in REQUIRED_BROWSERS:
             browser_type = getattr(pw, name, None)
             if browser_type is None:
+                missing.append(f"{name}: playwright has no {name} browser type")
                 continue
             browser = _launch(browser_type, name)
-            if browser is not None:
+            if browser is None:
+                missing.append(f"{name}: no launchable binary (bundled download and system fallback both failed)")
+            else:
                 started[name] = browser
-        if "chromium" not in started:
-            pytest.skip("chromium is required for UI evidence and could not start")
+        if missing:
+            for b in started.values():
+                b.close()
+            message = "required UI browser(s) unavailable: " + "; ".join(missing)
+            if allow_missing:
+                pytest.skip(message + " (UI_ALLOW_MISSING_BROWSERS=1)")
+            pytest.fail(message + " - install the browser or unset UI_ALLOW_MISSING_BROWSERS")
         try:
             yield started
         finally:
@@ -107,14 +142,17 @@ def browsers():
                 b.close()
 
 
-@pytest.fixture(params=["chromium", "firefox"])
+def _new_context(browser, name, **overrides):
+    kwargs = {"viewport": {"width": 1280, "height": 900}}
+    if name in CONTEXT_PERMISSIONS:
+        kwargs["permissions"] = CONTEXT_PERMISSIONS[name]
+    kwargs.update(overrides)
+    return browser.new_context(**kwargs)
+
+
+@pytest.fixture(params=list(REQUIRED_BROWSERS))
 def page(request, browsers, server):
-    if request.param not in browsers:
-        pytest.skip(f"{request.param} not installed")
-    context = browsers[request.param].new_context(
-        viewport={"width": 1280, "height": 900},
-        permissions=["clipboard-read", "clipboard-write"],
-    )
+    context = _new_context(browsers[request.param], request.param)
     page = context.new_page()
     errors = []
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
@@ -126,6 +164,31 @@ def page(request, browsers, server):
     finally:
         assert errors == [], f"{request.param} console errors: {errors}"
         context.close()
+
+
+def read_clipboard(page) -> str:
+    """Read the *real* clipboard through the production navigator.clipboard path.
+
+    Prefers a direct async read (chromium permission / firefox test pref). If a
+    browser refuses the direct read, fall back to the DOM paste path, which still
+    exercises the genuine OS clipboard without stubbing production code.
+    """
+    try:
+        return page.evaluate("() => navigator.clipboard.readText()")
+    except Exception:
+        page.evaluate(
+            """() => {
+                var d = document.createElement('div');
+                d.id = '__clip_probe';
+                d.contentEditable = 'true';
+                d.style.position = 'fixed';
+                d.style.top = '-1000px';
+                document.body.appendChild(d);
+                d.focus();
+            }"""
+        )
+        page.keyboard.press("Control+V")
+        return page.evaluate("() => document.getElementById('__clip_probe').textContent")
 
 
 def total_text(page) -> str:
@@ -148,6 +211,8 @@ def test_default_state_renders_exact_ledger(page, server):
     assert "m=qwen2.5-7b-instruct" in url
     assert "q=bf16" in url
     assert "c=8192" in url
+    # overhead is unknown, so it must NOT be pinned into the share link
+    assert "o=0" not in url
 
 
 def test_model_and_quant_change_recomputes_and_updates_url(page):
@@ -193,14 +258,24 @@ def test_invalid_url_is_sanitised_with_visible_notices(page, server):
     assert "GiB" in total_text(page)
 
 
-def test_copy_report_puts_honest_text_on_the_clipboard(page):
+def test_copy_report_puts_exact_honest_text_on_the_clipboard(page):
+    expected = page.evaluate("() => document.getElementById('share-tg').dataset.report")
     page.click("#copy-report")
     page.wait_for_function("document.getElementById('status').textContent.length > 0", timeout=5000)
     assert "copied" in page.inner_text("#status").lower()
-    clip = page.evaluate("navigator.clipboard.readText()")
+    clip = read_clipboard(page)
+    # exact byte-for-byte clipboard content, read back through navigator.clipboard
+    assert clip == expected
     assert "NOT measured VRAM" in clip
     assert "not a fit guarantee" in clip
     assert "qwen2.5-7b-instruct" in clip
+
+
+def test_copy_link_puts_the_share_url_on_the_clipboard(page):
+    page.click("#copy-link")
+    page.wait_for_function("document.getElementById('status').textContent.length > 0", timeout=5000)
+    clip = read_clipboard(page)
+    assert "m=qwen2.5-7b-instruct" in clip and "c=8192" in clip
 
 
 def test_telegram_share_link_is_official_and_carries_state(page):
@@ -224,8 +299,8 @@ def test_keyboard_reachable_controls(page):
 
 
 def test_mobile_360_has_no_horizontal_overflow(browsers, server, screenshots_dir):
-    browser = browsers.get("chromium") or next(iter(browsers.values()))
-    context = browser.new_context(viewport={"width": 360, "height": 740}, device_scale_factor=2)
+    browser = browsers["chromium"]
+    context = _new_context(browser, "chromium", viewport={"width": 360, "height": 740}, device_scale_factor=2)
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
@@ -244,8 +319,8 @@ def test_mobile_360_has_no_horizontal_overflow(browsers, server, screenshots_dir
 
 
 def test_desktop_screenshots(browsers, server, screenshots_dir):
-    browser = browsers.get("chromium") or next(iter(browsers.values()))
-    context = browser.new_context(viewport={"width": 1280, "height": 980}, device_scale_factor=1)
+    browser = browsers["chromium"]
+    context = _new_context(browser, "chromium", viewport={"width": 1280, "height": 980}, device_scale_factor=1)
     page = context.new_page()
     page.goto(server)
     page.wait_for_selector("#out-total")
@@ -261,4 +336,41 @@ def test_desktop_screenshots(browsers, server, screenshots_dir):
     context.close()
 
     shots = sorted(p.name for p in screenshots_dir.glob("desktop-1280-*.png"))
+    assert len(shots) >= 3, shots
+
+
+def test_firefox_mobile_and_desktop_screenshots(browsers, server, screenshots_dir):
+    """Firefox must be exercised visually too - not just launched."""
+    assert "firefox" in browsers, "firefox is required for UI evidence"
+    browser = browsers["firefox"]
+
+    mobile = _new_context(browser, "firefox", viewport={"width": 360, "height": 740}, device_scale_factor=2)
+    mpage = mobile.new_page()
+    errors = []
+    mpage.on("pageerror", lambda exc: errors.append(str(exc)))
+    mpage.goto(server)
+    mpage.wait_for_selector("#out-total")
+    metrics = mpage.evaluate(
+        "({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,"
+        " bw: document.body.scrollWidth})"
+    )
+    assert metrics["sw"] <= metrics["cw"] + 1, metrics
+    assert metrics["bw"] <= metrics["cw"] + 1, metrics
+    assert "GiB" in mpage.inner_text("#out-total").strip()
+    mpage.screenshot(path=str(screenshots_dir / "firefox-360-mobile.png"), full_page=True)
+    assert errors == []
+    mobile.close()
+
+    desktop = _new_context(browser, "firefox", viewport={"width": 1280, "height": 980}, device_scale_factor=1)
+    dpage = desktop.new_page()
+    dpage.goto(server)
+    dpage.wait_for_selector("#out-total")
+    dpage.screenshot(path=str(screenshots_dir / "firefox-1280-desktop.png"), full_page=True)
+
+    dpage.goto(f"{server}?m=llama-3-70b&q=fp8&c=999999")
+    dpage.wait_for_selector("#notices:not([hidden])")
+    dpage.screenshot(path=str(screenshots_dir / "firefox-1280-invalid-url-notice.png"), full_page=True)
+    desktop.close()
+
+    shots = sorted(p.name for p in screenshots_dir.glob("firefox-*.png"))
     assert len(shots) >= 3, shots

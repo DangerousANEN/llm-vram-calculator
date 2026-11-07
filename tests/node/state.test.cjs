@@ -25,12 +25,21 @@ const cat = { models: catalog.models };
 const qwen25 = catalog.models[0];
 const qwen3 = catalog.models[1];
 
+function ledgerFor(model, over) {
+  const state = Object.assign(
+    { modelId: model.id, quant: "q4_k_m", context: 8192, batch: 1, overhead: null, kvDtype: "fp16" },
+    over || {}
+  );
+  return { state, led: S.computeLedger(model, state) };
+}
+
 test("defaults are applied when the query is empty", () => {
   const { state, notices } = S.parseState("", cat);
   assert.strictEqual(state.modelId, "qwen2.5-7b-instruct");
   assert.strictEqual(state.quant, "bf16");
   assert.strictEqual(state.context, 8192);
   assert.strictEqual(state.batch, 1);
+  assert.strictEqual(state.overhead, null);
   assert.deepStrictEqual(notices, []);
 });
 
@@ -64,16 +73,53 @@ test("absurd context is clamped to the model max", () => {
   assert.ok(notices.some((n) => /clamped/.test(n)));
 });
 
-test("negative and garbage numbers never produce NaN state", () => {
-  const { state } = S.parseState("?c=-5&b=abc&o=-1", cat);
-  assert.strictEqual(state.context, 8192);
-  assert.strictEqual(state.batch, 1);
-  assert.strictEqual(state.overhead, 0);
+test("invalid context numerics are sanitised with a notice, never silently precise", () => {
+  for (const bad of ["NaN", "-1", "1.5", "abc"]) {
+    const { state, notices } = S.parseState("?m=qwen3-8b&c=" + encodeURIComponent(bad), cat);
+    assert.ok(Number.isInteger(state.context) && state.context >= 1, "c=" + bad + " -> " + state.context);
+    assert.ok(notices.some((n) => /context/i.test(n)), "missing notice for c=" + bad);
+  }
+  // an absent value is a default, not an error
+  const blank = S.parseState("?m=qwen3-8b&c=", cat);
+  assert.strictEqual(blank.state.context, 8192);
+  assert.deepStrictEqual(blank.notices, []);
 });
 
-test("batch is bounded", () => {
-  const { state } = S.parseState("?b=99999", cat);
+test("negative and garbage numbers never produce NaN state", () => {
+  const { state, notices } = S.parseState("?c=-5&b=abc&o=-1", cat);
+  assert.strictEqual(state.context, 8192);
+  assert.strictEqual(state.batch, 1);
+  assert.strictEqual(state.overhead, null);
+  assert.ok(notices.some((n) => /context/i.test(n)));
+  assert.ok(notices.some((n) => /batch/i.test(n)));
+  assert.ok(notices.some((n) => /overhead/i.test(n)));
+});
+
+test("batch is bounded with a notice", () => {
+  // a huge batch is reduced by the supported bounds; a single-token context
+  // isolates the MAX_BATCH ceiling itself
+  const huge = S.parseState("?b=99999", cat);
+  assert.ok(huge.state.batch <= S.MAX_BATCH, huge.state.batch);
+  assert.ok(huge.notices.some((n) => /batch|supported bound/i.test(n)), huge.notices);
+
+  const { state, notices } = S.parseState("?c=1&b=99999", cat);
   assert.strictEqual(state.batch, 4096);
+  assert.strictEqual(state.context, 1);
+  assert.ok(notices.some((n) => /batch/i.test(n)));
+});
+
+test("context x batch respects the python MAX_POSITIONS bound", () => {
+  assert.strictEqual(S.MAX_POSITIONS, 33554432);
+  const { state, notices } = S.parseState("?m=qwen3-8b&c=40960&b=4096", cat);
+  assert.ok(state.context * state.batch <= S.MAX_POSITIONS, state.context * state.batch);
+  assert.ok(notices.some((n) => /supported bound|positions/i.test(n)), notices);
+});
+
+test("derived KV cache is kept under the 1 TiB python bound", () => {
+  assert.strictEqual(S.MAX_KV_BYTES, Math.pow(2, 40));
+  const { state } = S.parseState("?m=qwen3-8b&c=40960&b=4096", cat);
+  const led = S.computeLedger(qwen3, Object.assign({ kvDtype: "fp16", overhead: null }, state));
+  assert.ok(led.kvBytes <= S.MAX_KV_BYTES, led.kvBytes);
 });
 
 test("unknown kv dtype falls back to fp16", () => {
@@ -82,26 +128,78 @@ test("unknown kv dtype falls back to fp16", () => {
   assert.ok(notices.some((n) => /not modelled/.test(n)));
 });
 
+test("omitted overhead stays unknown; explicit zero stays explicit", () => {
+  assert.strictEqual(S.parseState("", cat).state.overhead, null);
+  assert.strictEqual(ledgerFor(qwen25).led.overheadUnknown, true);
+
+  const zero = S.parseState("?o=0", cat).state;
+  assert.strictEqual(zero.overhead, 0);
+  assert.strictEqual(S.computeLedger(qwen25, zero).overheadUnknown, false);
+});
+
+test("manual overhead beyond the supported bound clamps with a notice", () => {
+  const { state, notices } = S.parseState("?o=9000", cat);
+  assert.strictEqual(state.overhead, S.MAX_OVERHEAD_GIB);
+  assert.ok(notices.some((n) => /overhead/i.test(n)), notices);
+
+  const junk = S.parseState("?o=100000", cat);
+  assert.strictEqual(junk.state.overhead, null);
+  assert.ok(junk.notices.some((n) => /overhead/i.test(n)));
+});
+
+test("computeLedger refuses invalid numerics instead of returning NaN", () => {
+  for (const bad of [0, -1, 1.5, NaN, "8192", null]) {
+    assert.throws(
+      () => S.computeLedger(qwen25, { quant: "q4_k_m", context: bad, batch: 1, kvDtype: "fp16", overhead: null }),
+      /context/i
+    );
+  }
+  assert.throws(
+    () => S.computeLedger(qwen25, { quant: "q4_k_m", context: 8192, batch: 4097, kvDtype: "fp16", overhead: null }),
+    /batch/i
+  );
+  assert.throws(
+    () => S.computeLedger(qwen25, { quant: "q4_k_m", context: 32768, batch: 4096, kvDtype: "fp16", overhead: null }),
+    /position|bound/i
+  );
+  assert.throws(
+    () => S.computeLedger(qwen25, { quant: "q4_k_m", context: 8192, batch: 1, kvDtype: "fp8", overhead: null }),
+    /kv/i
+  );
+});
+
 test("ledger bytes match the python implementation", () => {
-  const state = { modelId: qwen25.id, quant: "q4_k_m", context: 8192, batch: 1, overhead: 0, kvDtype: "fp16" };
-  const led = S.computeLedger(qwen25, state);
+  const { led } = ledgerFor(qwen25, { quant: "q4_k_m", context: 8192, batch: 1 });
   assert.strictEqual(led.weightsBytes, 4683073632);
   assert.strictEqual(led.kvPerToken, 57344);
   assert.strictEqual(led.kvBytes, 469762048);
   assert.strictEqual(led.totalBytes, 5152835680);
 
-  const q3 = { modelId: qwen3.id, quant: "bf16", context: 32768, batch: 2, overhead: 0, kvDtype: "fp16" };
-  const led3 = S.computeLedger(qwen3, q3);
+  const { led: led3 } = ledgerFor(qwen3, { quant: "bf16", context: 32768, batch: 2 });
   assert.strictEqual(led3.weightsBytes, 16381516776);
   assert.strictEqual(led3.kvBytes, 147456 * 32768 * 2);
 });
 
 test("report text carries the honesty disclaimer", () => {
-  const state = { modelId: qwen25.id, quant: "q4_k_m", context: 8192, batch: 1, overhead: 0, kvDtype: "fp16" };
-  const text = S.reportText(qwen25, state, S.computeLedger(qwen25, state));
+  const { state, led } = ledgerFor(qwen25, { context: 8192, batch: 1 });
+  const text = S.reportText(qwen25, state, led);
   assert.ok(/NOT measured VRAM/.test(text));
   assert.ok(/not a fit guarantee/.test(text));
   assert.ok(text.indexOf(qwen25.source.revision.slice(0, 12)) > -1);
+});
+
+test("report text preserves explicit unknown overhead and source units", () => {
+  const { state, led } = ledgerFor(qwen25, { context: 8192, batch: 1 });
+  const text = S.reportText(qwen25, state, led);
+  const line = text.split("\n").filter((l) => /^overhead:/.test(l))[0];
+  assert.ok(/unknown/i.test(line), line);
+  assert.ok(!/manual bound/i.test(line), line);
+  assert.ok(/GiB/.test(text) && /B\)/.test(text), "units and exact bytes must be present");
+
+  const bound = { state: Object.assign({}, state, { overhead: 1.5 }), led: S.computeLedger(qwen25, Object.assign({}, state, { overhead: 1.5 })) };
+  const line2 = S.reportText(qwen25, bound.state, bound.led).split("\n").filter((l) => /^overhead:/.test(l))[0];
+  assert.ok(/manual bound/i.test(line2), line2);
+  assert.ok(/1\.5/.test(line2) || /1\.610/.test(line2), line2);
 });
 
 test("formatters keep binary units", () => {

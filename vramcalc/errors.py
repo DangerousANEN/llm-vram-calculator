@@ -48,4 +48,4 @@ class UnsupportedFeature(CalcError):
 
 class BenchmarkError(CalcError):
     code = "benchmark_error"
-    exit_code = 3
+    exit_code = 2

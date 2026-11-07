@@ -30,10 +30,32 @@ def test_qwen25_q4km_8192_ledger_is_exact(qwen25):
 
 def test_runtime_overhead_is_unknown_not_invented(qwen25):
     d = compute_ledger(qwen25, "q4_k_m", 8192).to_dict()
-    assert d["runtime_overhead"]["bytes"] == 0
-    assert d["runtime_overhead"]["kind"] == "unknown_not_estimated"
-    assert d["runtime_overhead"]["label"] is None
-    assert "NOT estimated" in d["runtime_overhead"]["note"]
+    oh = d["runtime_overhead"]
+    # unknown must be explicit and must NOT masquerade as a measured zero
+    assert oh["bytes"] is None
+    assert oh["gib"] is None
+    assert oh["unknown"] is True
+    assert oh["kind"] == "unknown_not_estimated"
+    assert oh["label"] is None
+    assert "NOT estimated" in oh["note"]
+    # the subtotal stays useful and the total still equals weights+KV
+    assert d["subtotal"]["bytes"] > 0
+    assert d["subtotal"]["bytes"] == d["weights"]["bytes"] + d["kv_cache"]["bytes"]
+    assert d["ledger_total"]["bytes"] == d["subtotal"]["bytes"]
+    assert d["ledger_total"]["unknown_overhead_excluded"] is True
+    assert d["ledger_total"]["includes_manual_overhead_only"] is True
+
+
+def test_unknown_overhead_is_not_confused_with_an_explicit_zero_bound(qwen25):
+    implicit = compute_ledger(qwen25, "q4_k_m", 8192).to_dict()
+    explicit = compute_ledger(qwen25, "q4_k_m", 8192, manual_overhead_gib=0).to_dict()
+    assert implicit["runtime_overhead"]["unknown"] is True
+    assert implicit["runtime_overhead"]["bytes"] is None
+    assert explicit["runtime_overhead"]["unknown"] is False
+    assert explicit["runtime_overhead"]["bytes"] == 0
+    assert explicit["runtime_overhead"]["gib"] == 0.0
+    assert explicit["runtime_overhead"]["kind"] == "manual_bound"
+    assert "manual bound" in explicit["runtime_overhead"]["label"].lower()
 
 
 def test_manual_overhead_is_labelled_and_added(qwen25):
@@ -41,8 +63,10 @@ def test_manual_overhead_is_labelled_and_added(qwen25):
     d = led.to_dict()
     assert d["runtime_overhead"]["bytes"] == int(1.5 * GIB) == 1_610_612_736
     assert d["runtime_overhead"]["kind"] == "manual_bound"
+    assert d["runtime_overhead"]["unknown"] is False
     assert "manual bound" in d["runtime_overhead"]["label"]
     assert d["ledger_total"]["bytes"] == d["subtotal"]["bytes"] + 1_610_612_736
+    assert d["ledger_total"]["unknown_overhead_excluded"] is False
 
 
 def test_never_claims_measured_vram_or_fit(qwen25):

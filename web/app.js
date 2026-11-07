@@ -53,7 +53,7 @@
       quant: el.quant.value,
       context: parseInt(el.ctx.value, 10),
       batch: parseInt(el.batch.value, 10),
-      overhead: el.overhead.value === "" ? 0 : parseFloat(el.overhead.value),
+      overhead: el.overhead.value === "" ? null : parseFloat(el.overhead.value),
       kvDtype: el.kvDtype.value
     };
   }
@@ -114,10 +114,14 @@
     el.subtotal.textContent = S.fmtGib(ledger.subtotalBytes);
     el.subtotalBytes.textContent = S.fmtBytes(ledger.subtotalBytes);
     // never print "0.000 GiB" for something that is unknown rather than zero
-    el.overheadOut.textContent = ledger.overheadBytes ? S.fmtGib(ledger.overheadBytes) : "\u2014";
-    el.overheadBytes.textContent = ledger.overheadBytes
-      ? "manual bound, not estimated"
-      : "unknown \u00b7 not estimated";
+    if (ledger.overheadUnknown) {
+      el.overheadOut.textContent = "\u2014";
+      el.overheadBytes.textContent = "unknown \u00b7 not estimated";
+    } else {
+      el.overheadOut.textContent = S.fmtGib(ledger.overheadBytes);
+      el.overheadBytes.textContent =
+        ledger.overheadBytes === 0 ? "manual bound, explicitly zero \u00b7 not estimated" : "manual bound \u00b7 not estimated";
+    }
     el.total.textContent = S.fmtGib(ledger.totalBytes);
     el.totalBytes.textContent = S.fmtBytes(ledger.totalBytes);
     el.formula.textContent =
@@ -193,7 +197,7 @@
     el.ctxRange.value = String(Math.min(state.context, parseInt(el.ctxRange.max, 10)));
     el.batch.value = String(state.batch);
     el.kvDtype.value = state.kvDtype;
-    el.overhead.value = state.overhead ? String(state.overhead) : "";
+    el.overhead.value = state.overhead === null || state.overhead === undefined ? "" : String(state.overhead);
     el.ctxMax.textContent = "max " + S.maxContextOf(currentModel());
     el.ctxRange.max = String(S.maxContextOf(currentModel()));
   }

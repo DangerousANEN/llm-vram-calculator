@@ -267,6 +267,8 @@ class Ledger:
     max_context: int
     limits: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    #: True only when the caller supplied an explicit manual bound (0 counts).
+    manual_overhead_provided: bool = False
 
     @property
     def subtotal_bytes(self) -> int:
@@ -303,10 +305,13 @@ class Ledger:
                 "formula": "2 (key+value) * layers * num_key_value_heads * head_dim * bytes_per_element * context * batch",
             },
             "runtime_overhead": {
-                "bytes": self.manual_overhead_bytes,
-                "gib": gib(self.manual_overhead_bytes),
+                # An unknown overhead must never look like a measured zero:
+                # bytes/gib are null and ``unknown`` says so explicitly.
+                "kind": "manual_bound" if self.manual_overhead_provided else "unknown_not_estimated",
+                "unknown": not self.manual_overhead_provided,
+                "bytes": self.manual_overhead_bytes if self.manual_overhead_provided else None,
+                "gib": gib(self.manual_overhead_bytes) if self.manual_overhead_provided else None,
                 "label": self.manual_overhead_label,
-                "kind": "manual_bound" if self.manual_overhead_bytes else "unknown_not_estimated",
                 "note": (
                     "CUDA context, allocator fragmentation, activations, graph/workspace buffers and "
                     "tokenizer/server overhead are runtime dependent and are NOT estimated by this tool. "
@@ -319,6 +324,10 @@ class Ledger:
                 "gib": gib(self.ledger_total_bytes),
                 "is_measured_vram": False,
                 "is_fit_guarantee": False,
+                # The total adds the manual bound only; unknown overhead is never
+                # silently folded in as zero without saying so.
+                "includes_manual_overhead_only": True,
+                "unknown_overhead_excluded": not self.manual_overhead_provided,
             },
             "source": self.source,
             "max_context": self.max_context,
@@ -383,6 +392,7 @@ def compute_ledger(
     if manual_overhead_gib is None:
         overhead_bytes = 0
         overhead_label = None
+        overhead_provided = False
     else:
         if isinstance(manual_overhead_gib, bool) or not isinstance(manual_overhead_gib, (int, float)):
             raise InvalidParameter("manual overhead must be a number of GiB", code="invalid_overhead")
@@ -395,6 +405,7 @@ def compute_ledger(
             )
         overhead_bytes = int(round(float(manual_overhead_gib) * GIB))
         overhead_label = f"manual bound provided by the user: {manual_overhead_gib} GiB"
+        overhead_provided = True
 
     limits = [
         "Runtime overhead (CUDA context, allocator fragmentation, activations, workspaces) is not estimated.",
@@ -444,6 +455,7 @@ def compute_ledger(
         max_context=max_ctx,
         limits=limits,
         notes=notes,
+        manual_overhead_provided=overhead_provided,
     )
 
 

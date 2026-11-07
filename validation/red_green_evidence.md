@@ -123,3 +123,82 @@ Written by headless chromium during the UI run, inspected visually afterwards:
 Screenshots are inspection evidence; the assertions that matter (byte-for-byte
 ledger values, URL round-trip, clipboard text, notice text, scroll width) are
 DOM assertions in `tests/test_ui.py`.
+
+---
+
+# Revision round (2.0.0 small safety/correctness revision)
+
+Same sandbox (`zexkora-growth-sandbox`, `/workspace`). Unlike the first round,
+the RED below is **behavioural**: the new tests were run against the unfixed
+source and failed on real assertions. The earlier "5 collection errors" run is
+not offered as TDD proof any more.
+
+## 6. RED (this revision) — before the fixes
+
+| run | command | real output |
+|---|---|---|
+| python | `python3 -m pytest -m "not ui"` | **11 failed, 114 passed, 19 deselected** |
+| node | `node tests/node/state.test.cjs` | exit 1: `FAIL: defaults are applied when the query is empty` / `Expected 0 !== null` (an omitted overhead was a fake 0, not unknown) |
+| UI (old suite) | `python3 -m pytest -m ui` on the committed `tests/test_ui.py` | **7 ERROR** at fixture setup, each `Error: Browser.new_context: Unknown permission: clipboard-read` (all Firefox parameterisations) |
+
+Failing python tests (verbatim summary): 6 × `tests/test_bench.py` (probe still
+active), `test_ledger.py::test_runtime_overhead_is_unknown_not_invented`
+(`KeyError: 'unknown'`), `test_ledger.py::test_unknown_overhead_is_not_confused_with_an_explicit_zero_bound`,
+`test_ledger.py::test_manual_overhead_is_labelled_and_added`, 
+`test_legacy_regression.py::test_final_api_passes_the_same_requirement`,
+`test_web_static.py::test_node_state_tests_pass`.
+
+### Real pre-change behavioural harness
+
+`tests/test_legacy_regression.py` loads the frozen public
+`calculate_vram` from git `2dcb9ff` (`tests/fixtures/legacy_vram_calc_2dcb9ff.py`,
+test fixture only, never imported by the package) and runs the same release
+requirement the ledger must meet:
+
+* KV bytes for Qwen2.5-7B @ 8192 tokens must be `57344 * 8192 = 469762048`;
+* runtime overhead must be an explicit `unknown_not_estimated`.
+
+Legacy output: KV ≈ 1.09 GiB (it guesses `ceil(14 + 7*log2(7.6)) = 35` layers and
+8 KV heads instead of the real 28 × 4), and `cuda_overhead_gb = 0.65` +
+`activations_gb = 0.08` are invented numbers with no unknown representation. The
+shared requirement check raises a genuine `AssertionError` on that output; then
+the same check passes on `compute_ledger`. That is the behavioural RED/GREEN,
+not a collection error.
+
+## 7. GREEN (this revision)
+
+| run | result |
+|---|---|
+| `python3 -m pytest -m "not ui"` | **125 passed, 19 deselected in 7.80s** |
+| `node tests/node/state.test.cjs` | **OK (19 tests)** |
+| `python3 -m pytest -m ui tests/test_ui.py` | **19 passed in 75.75s** — 8 page tests × {chromium, firefox} + 3 screenshot tests, **zero skips** |
+| `python3 scripts/build_web.py --check` | `OK: index.html is up to date (47869 bytes)` |
+| `python3 scripts/fetch_model_metadata.py --check` | `OK: ... matches upstream metadata for 2 models` |
+| `python -m build` + clean-venv wheel smoke | wheel installs; `calc --json` → weights 4683073632 B, total 4.799 GiB, `runtime_overhead.bytes = null` + `unknown = true`; `bench --json` exits **2** with `benchmark_disabled` |
+
+### Firefox clipboard evidence
+
+Firefox has no `clipboard-read` permission; passing it was the original crash.
+The test fixture now launches Firefox with Firefox's own async-clipboard test
+preference (`dom.events.testing.asyncClipboard = true`) and chromium with its
+clipboard permissions. `test_copy_report_puts_exact_honest_text_on_the_clipboard`
+clicks the real button and asserts the clipboard content is **byte-for-byte** the
+expected report (read back through the real `navigator.clipboard`, with a DOM
+paste fallback). No production code is stubbed.
+
+### Firefox screenshots (real browser output, inspected with vision)
+
+* `validation/screenshots/firefox-360-mobile.png` (360 px, no horizontal overflow)
+* `validation/screenshots/firefox-1280-desktop.png`
+* `validation/screenshots/firefox-1280-invalid-url-notice.png`
+
+The 360 px and desktop renders show `Runtime overhead — unknown · not estimated`
+(em dash, no numeric `0.000 GiB`), unchanged original styling and readable ledger
+rows.
+
+### Benchmark is gone, not merely relabelled
+
+`tests/test_bench.py` proves the absence of a probe: a live local HTTP server
+sees **0 requests**, the CLI exits 2 with `{"error": "benchmark_disabled"}`, and
+`vramcalc/bench.py` carries no `urllib`/`socket`/`http` transport at all. No
+tokens/s figure is claimed in README, docs, CLI or the manifest.
