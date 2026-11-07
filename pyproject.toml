@@ -4,25 +4,48 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-vram-calculator"
-version = "1.0.0"
+version = "2.0.0"
 authors = [
   { name = "DangerousANEN", email = "anen@local.dev" },
 ]
-description = "Fast, zero-dependency VRAM and KV-cache calculator for local LLM inference (vLLM, llama.cpp, Ollama)."
+description = "Config-grounded VRAM and KV-cache ledger for dense LLM inference, with revision-pinned model metadata."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
+license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-keywords = ["llm", "vram", "kv-cache", "inference", "vllm", "llama-cpp", "deepseek", "qwen"]
+keywords = ["llm", "vram", "kv-cache", "inference", "vllm", "llama-cpp", "qwen"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "build>=1.0", "playwright>=1.40"]
 
 [project.scripts]
-llm-vram-calc = "vram_calc:main"
+llm-vram-calc = "vramcalc.cli:main"
+vram-calc = "vramcalc.cli:main"
 
 [project.urls]
 "Homepage" = "https://dangerousanen.github.io/llm-vram-calculator/"
 "Repository" = "https://github.com/DangerousANEN/llm-vram-calculator"
+"Documentation" = "https://github.com/DangerousANEN/llm-vram-calculator/blob/main/docs/quickstart.en.md"
 "Telegram Channel" = "https://t.me/zexkora_hub"
+
+[tool.setuptools]
+packages = ["vramcalc"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+vramcalc = ["data/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "ui: headless browser tests (need playwright + a browser binary)",
+]

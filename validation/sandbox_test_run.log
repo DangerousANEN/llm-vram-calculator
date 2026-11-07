@@ -1,0 +1,39 @@
+### python3 -m pytest -m "not ui"
+..........................................................               [100%]
+130 passed, 16 deselected in 14.58s
+
+### node tests/node/state.test.cjs
+state.test.cjs: OK (12 tests)
+
+### python3 -m pytest -m ui tests/test_ui.py
+.s.s.s.s.s.s.s..                                                         [100%]
+9 passed, 7 skipped in 37.95s
+
+### python3 scripts/build_web.py --check
+OK: index.html is up to date (40914 bytes)
+
+### python3 scripts/fetch_model_metadata.py --check (network metadata re-verification)
+OK: /workspace/vramcalc/data/models.json matches upstream metadata for 2 models
+
+### REVISION ROUND (2.0.0 small safety/correctness revision)
+
+### python3 -m pytest -o addopts="" -m "not ui" -q
+125 passed, 19 deselected in 7.80s
+
+### node tests/node/state.test.cjs
+state.test.cjs: OK (19 tests)
+
+### python3 -m pytest -o addopts="" -m ui tests/test_ui.py -q   (chromium AND firefox, zero skips)
+19 passed in 75.75s
+
+### python3 -m pytest -o addopts="" -q   (everything)
+144 passed in 72.35s
+
+### python3 scripts/build_web.py --check
+OK: index.html is up to date (47869 bytes)
+
+### python3 scripts/fetch_model_metadata.py --check
+OK: /workspace/vramcalc/data/models.json matches upstream metadata for 2 models
+
+### python -m build + clean-venv wheel smoke
+sdist+wheel built; vram-calc calc --json -> weights 4683073632 B, total 4.799 GiB, runtime_overhead.bytes=null unknown=true; vram-calc bench --json -> exit 2 benchmark_disabled

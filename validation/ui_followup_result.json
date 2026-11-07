@@ -1,0 +1,93 @@
+{
+  "task": "focused revision of 3 residual UI bugs (fraction/blank numerics, fp16 badge honesty, copy-failure status)",
+  "base_commit": "5ddee19",
+  "model": "deepseek-v4.1-flash-1017/custom:zstandard",
+  "environment": "docker exec zexkora-growth-sandbox (repo bind-mounted at /workspace); no host GUI, no paid models",
+  "bugs_fixed": [
+    {
+      "id": "fraction_and_blank_numerics",
+      "symptom": "c=1.5 became context 1 and b=2.5 became batch 2 with notices hidden; blank field silently became the default",
+      "root_cause": "web/app.js readControls() ran parseInt on the field values and onChange() replaced NaN with 8192/1 before state.parseState() (the strict parser) ever saw the raw text",
+      "fix": [
+        "readControls() now passes the raw context/batch strings; onChange() forwards them unchanged so state.parseWhole() rejects '1.5'/'2.5' with a visible notice and falls back to the documented defaults",
+        "blank *entered field* now raises an explicit field-level notice in onChange ('... was left blank; using the default N ...')",
+        "the URL contract is preserved: a blank c=/b= parameter is still a silent documented default (no notice), as asserted by the pre-existing node test"
+      ],
+      "files": ["web/app.js", "web/state.js (unchanged semantics, verified)"]
+    },
+    {
+      "id": "fp16_badge_claims_exact_file",
+      "symptom": "FP16 showed badge 'exact official file' although weights source is official_safetensors_size_equivalent",
+      "root_cause": "web/app.js render() hardcoded the exact-file label for every quantisation",
+      "fix": [
+        "badge is now 'size equivalent' (class badge est) for official_safetensors_size_equivalent and 'exact official file' (badge exact) for official_gguf / official bf16",
+        "new always-visible provenance line #prov-weights-basis explains the bf16 basis: 2 bytes per element, the byte total is the official BF16 size, there is no separate FP16 file at this revision",
+        "badge title carries the same basis plus the pinned revision"
+      ],
+      "files": ["web/app.js", "web/styles.css", "web/template.html (unchanged markup)", "index.html (rebuilt)"]
+    },
+    {
+      "id": "copy_failure_reports_success",
+      "symptom": "status said 'Report copied to clipboard.' when navigator.clipboard.writeText rejected and document.execCommand() returned false",
+      "root_cause": "the legacy fallback called document.execCommand('copy') and then done() unconditionally, ignoring the returned boolean",
+      "fix": [
+        "success is announced only when writeText resolves or document.execCommand('copy') === true",
+        "both paths failing shows 'Copy failed: the browser refused clipboard access...' and reveals a visible readonly textarea prefilled with the real report text, focused and fully selected",
+        "the success path hides and clears the manual-copy box; the hidden scratch textarea used for execCommand is still removed"
+      ],
+      "files": ["web/app.js", "web/template.html", "web/styles.css", "index.html (rebuilt)"]
+    }
+  ],
+  "tests_added": [
+    "tests/test_ui.py::test_fractional_context_and_batch_are_not_silently_truncated (chromium+firefox)",
+    "tests/test_ui.py::test_blank_numeric_field_is_explicitly_noticed (chromium+firefox)",
+    "tests/test_ui.py::test_fp16_badge_is_size_equivalent_not_an_exact_file (chromium+firefox)",
+    "tests/test_ui.py::test_fp16_size_equivalent_mobile_screenshot (chromium+firefox, 360px, overflow checked)",
+    "tests/test_ui.py::test_copy_failure_is_reported_as_failure_with_selectable_text (chromium+firefox)",
+    "tests/test_ui.py::test_copy_success_is_only_announced_on_a_literal_true (chromium+firefox)",
+    "tests/node/state.test.cjs: 'fractional context/batch are rejected instead of silently truncated'"
+  ],
+  "copy_failure_simulation": {
+    "method": "page.add_init_script with an IIFE (a bare arrow function string is never invoked by add_init_script - that was the earlier ineffective-injection bug)",
+    "stub": "Object.defineProperty on both navigator and Navigator.prototype for clipboard + document.execCommand override",
+    "self_check": "_assert_copy_simulation() probes window.__copyStubInstalled, typeof navigator.clipboard.writeText, document.execCommand('copy') === expected and navigator.clipboard.writeText('probe') -> 'rejected' before clicking",
+    "normal_path_untouched": "the pre-existing real-OS-clipboard tests (read_clipboard comparison) still run without any stub in both browsers and pass"
+  },
+  "red_evidence": {
+    "command": "docker exec zexkora-growth-sandbox bash -lc 'cd /workspace && python -m pytest -q tests/test_ui.py -k \"fractional or blank_numeric or fp16 or copy_failure or literal_true\"'",
+    "state": "pre-fix sources restored from HEAD 5ddee19 (web/app.js, web/state.js, web/styles.css, web/template.html, index.html), tests kept new",
+    "result": "8 failed, 1 passed",
+    "failures": [
+      "test_fractional_context_and_batch_are_not_silently_truncated[chromium]",
+      "test_fractional_context_and_batch_are_not_silently_truncated[firefox]",
+      "test_blank_numeric_field_is_explicitly_noticed[chromium]",
+      "test_blank_numeric_field_is_explicitly_noticed[firefox]",
+      "test_fp16_badge_is_size_equivalent_not_an_exact_file[chromium]",
+      "test_fp16_badge_is_size_equivalent_not_an_exact_file[firefox]",
+      "test_fp16_size_equivalent_mobile_screenshot",
+      "test_copy_failure_is_reported_as_failure_with_selectable_text (assert 'copied to clipboard' not in 'report copied to clipboard.')"
+    ],
+    "passed_pre_fix": "test_copy_success_is_only_announced_on_a_literal_true - expected: the old code always claimed success, so this is a forward guard, not a RED",
+    "log": "validation/red_followup_ui.log"
+  },
+  "green_evidence": {
+    "targeted": "9 passed (fractional, blank, fp16, fp16-mobile, copy-failure, copy-true across chromium+firefox)",
+    "full_suite": "153 passed in 92.15s (docker, /workspace)",
+    "node": "node tests/node/state.test.cjs -> OK (20 tests)",
+    "build": "python scripts/build_web.py --check -> OK: index.html is up to date (51980 bytes); node --check on web/app.js and web/state.js clean",
+    "index_sha256_prefix": "82e38f9eb97817853003caee"
+  },
+  "screenshots": [
+    "validation/screenshots/chromium-360-fp16-size-equivalent.png",
+    "validation/screenshots/firefox-360-fp16-size-equivalent.png",
+    "validation/screenshots/chromium-360-copy-failure.png",
+    "validation/screenshots/firefox-360-copy-failure.png"
+  ],
+  "gaps_and_notes": [
+    "The node-level fractional test passes pre- and post-fix: state.parseWhole() was already strict; the defect lived in the page controller (parseInt/NaN replacement), which is why the RED is UI-only. No new full-TDD retrofit is claimed.",
+    "Blank URL parameter behaviour (c=, b=) is intentionally unchanged and still silent-by-default; only the entered-field path adds a notice.",
+    "Copy failure is exercised with stubbed browser APIs (permissions cannot be granted in headless Firefox); the success path keeps real OS clipboard verification in both browsers.",
+    "No other labels changed: official GGUF and official bf16 keep 'exact official file'.",
+    "Not performed: git push, publication, paid model calls, host GUI runs."
+  ]
+}

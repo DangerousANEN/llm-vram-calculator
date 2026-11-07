@@ -1,0 +1,179 @@
+{
+  "worker": "revision",
+  "model": "deepseek-v4.1-flash-1017",
+  "provider": "custom:zstandart",
+  "phase": "2.0.0 small release safety/correctness revision",
+  "repo": "/root/projects/llm-vram-calculator-v2",
+  "branch": "feat/config-grounded-growth-v2",
+  "base_commits": ["857bd8f", "22c9c1b"],
+  "pushed": false,
+  "merged": false,
+  "published": false,
+  "production_pipeline_touched": false,
+  "publication_policy_touched": false,
+  "weights_downloaded": false,
+  "gpu_runtime_checked": false,
+  "no_paid_requests": true,
+
+  "environment": {
+    "tests_executed_on": "docker exec zexkora-growth-sandbox (image zexkora-test-sandbox:20261107), workdir /workspace bind-mounted to the repo",
+    "host_test_execution": "none",
+    "container": {
+      "python": "3.13.18",
+      "pytest": "9.2.0",
+      "node": "v20.19.2",
+      "chromium": "/usr/bin/chromium 156.0.8078.79 (system binary; bundled playwright chromium build is absent in this image)",
+      "firefox": "playwright firefox-1555 / 157.0 (bundled inside the container), system /usr/bin/firefox-esr fallback"
+    }
+  },
+
+  "red": [
+    {
+      "what": "new revision tests against the unfixed source (real behavioural failures, not collection errors)",
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 -m pytest -m \"not ui\"",
+      "result": "11 failed, 114 passed, 19 deselected",
+      "failures": [
+        "tests/test_bench.py::test_run_bench_refuses_offline_without_touching_the_network",
+        "tests/test_bench.py::test_run_bench_still_accepts_the_legacy_signature_for_migration",
+        "tests/test_bench.py::test_bench_cli_receives_zero_requests_and_exits_two",
+        "tests/test_bench.py::test_bench_cli_text_error_names_the_migration",
+        "tests/test_bench.py::test_bench_module_has_no_network_transport",
+        "tests/test_bench.py::test_bench_help_says_the_probe_is_disabled",
+        "tests/test_ledger.py::test_runtime_overhead_is_unknown_not_invented (KeyError: 'unknown')",
+        "tests/test_ledger.py::test_unknown_overhead_is_not_confused_with_an_explicit_zero_bound",
+        "tests/test_ledger.py::test_manual_overhead_is_labelled_and_added (KeyError: 'unknown')",
+        "tests/test_legacy_regression.py::test_final_api_passes_the_same_requirement (KeyError: 'unknown')",
+        "tests/test_web_static.py::test_node_state_tests_pass (node suite red)"
+      ]
+    },
+    {
+      "what": "node URL-state suite against the unfixed web/state.js",
+      "command": "docker exec -w /workspace zexkora-growth-sandbox node tests/node/state.test.cjs",
+      "result": "exit 1: FAIL: defaults are applied when the query is empty / Expected 0 !== null (omitted overhead was a fake 0, not unknown)"
+    },
+    {
+      "what": "the committed test_ui.py (HEAD) against the installed Firefox build",
+      "command": "old tests/test_ui.py run as tests/_old_test_ui.py, -m ui",
+      "result": "7 ERROR at fixture setup, each: playwright._impl._errors.Error: Browser.new_context: Unknown permission: clipboard-read",
+      "note": "Chromium-only permissions were passed to Firefox unconditionally; the fixture also skipped Firefox instead of failing, so this stayed hidden."
+    },
+    {
+      "what": "real pre-change behavioural regression harness",
+      "command": "tests/test_legacy_regression.py (frozen public calculate_vram from git 2dcb9ff)",
+      "result": "the shared requirement check raises a genuine AssertionError on legacy output: KV 1.09 GiB (guessed 35 layers x 8 KV heads) vs config-grounded 469762048 B, and overhead is an invented 0.65+0.08 GiB instead of an explicit unknown",
+      "note": "This is behavioural RED, not a collection error. The same requirement then passes on compute_ledger."
+    }
+  ],
+
+  "green": [
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 -m pytest -o addopts=\"\" -m \"not ui\" -q",
+      "result": "125 passed, 19 deselected in 7.80s"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox node tests/node/state.test.cjs",
+      "result": "state.test.cjs: OK (19 tests)"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 -m pytest -o addopts=\"\" -m ui tests/test_ui.py -q",
+      "result": "19 passed in 75.75s (8 page tests x {chromium, firefox} + 3 screenshot tests)",
+      "detail": "Firefox loads through the bundled playwright build (157.0); chromium through /usr/bin/chromium 156 (bundled playwright chromium is not present in this image). Both are required and neither is skipped."
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 scripts/build_web.py --check",
+      "result": "OK: index.html is up to date (47869 bytes)"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 scripts/fetch_model_metadata.py --check",
+      "result": "OK: vramcalc/data/models.json matches upstream metadata for 2 models (metadata only, no weights)"
+    },
+    {
+      "command": "python3 -m build --outdir /tmp/dist && venv pip install wheel && smoke",
+      "result": "sdist+wheel built; clean venv: vram-calc models OK; calc --json -> weights 4683073632 B, ledger_total 4.799 GiB, runtime_overhead.bytes null + unknown true; bench --json exits 2 with benchmark_disabled"
+    }
+  ],
+
+  "fixes": [
+    {
+      "gap": "Firefox clipboard-read permission crashed all 7 Firefox parameterisations",
+      "change": "tests/test_ui.py: per-browser launch options. Chromium keeps clipboard-read/clipboard-write; Firefox is launched with its own test preference dom.events.testing.asyncClipboard=true (there is no clipboard-read permission in Firefox). No production navigator.clipboard is stubbed.",
+      "verification": "test_copy_report_puts_exact_honest_text_on_the_clipboard and test_copy_link_puts_the_share_url_on_the_clipboard click the real buttons in Firefox and read the real clipboard (direct async read, DOM paste fallback if a browser refuses); clipboard must equal the exact expected report text."
+    },
+    {
+      "gap": "Firefox suite could silently skip; missing required browser did not fail CI",
+      "change": "browsers fixture launches every REQUIRED_BROWSERS entry and pytest.fail()s when one is unavailable (opt-out only via UI_ALLOW_MISSING_BROWSERS=1); CI sets UI_REQUIRE_BROWSERS=1 and the node CI step no longer has a soft fallback that turned failure into success.",
+      "verification": "19/19 UI tests ran and passed with both browsers; no skips."
+    },
+    {
+      "gap": "copied report printed 0.000 GiB manual_bound for an omitted overhead",
+      "change": "web/state.js: overhead is null when omitted (explicit 0 preserved as an explicit zero bound); reportText prints 'overhead: unknown - not estimated by this tool'; subtotal/TOTAL carry GiB plus exact bytes and a units line.",
+      "verification": "node tests for report text, UI clipboard test in both browsers, Firefox/Chromium screenshots show an em dash + 'unknown · not estimated'."
+    },
+    {
+      "gap": "JS lacked Python bounds/refusals; invalid URL numerics silently defaulted",
+      "change": "web/state.js exports MAX_POSITIONS=33554432 and MAX_KV_BYTES=2^40 and MAX_OVERHEAD_GIB=4096; parseState strictly parses c/b/o, emits a visible notice for NaN/-1/1.5/garbage, clamps context*batch and derived KV, and clamps overhead >4096 with a notice; computeLedger throws coded errors (invalid_context/invalid_batch/positions_too_large/kv_too_large/unsupported_kv_dtype/invalid_overhead/unsupported_quant).",
+      "verification": "node tests cover URL + form + negative + limit-boundary parity with compute_ledger; UI invalid-URL test shows the notices."
+    },
+    {
+      "gap": "unsafe streaming bench (redirect + Authorization forwarding, (N-1)/window TPS, incomplete SSE counted as success, weak timeout)",
+      "change": "vramcalc/bench.py now contains no network transport at all: run_bench refuses with BenchmarkError code benchmark_disabled, details.migration, removed_in 2.0.0; BenchmarkError exits 2; CLI bench help/docs/README/quickstart state that the probe is temporarily disabled and requires a redesign.",
+      "verification": "test_bench: a live local HTTP server observes ZERO requests while the CLI exits 2 with JSON error benchmark_disabled; module has no urllib/socket/http import and source has no urlopen/socket.socket; wheel smoke exits 2."
+    },
+    {
+      "gap": "unknown runtime overhead JSON exposed bytes 0 / gib 0 next to kind unknown",
+      "change": "vramcalc/core.py: runtime_overhead gains unknown (bool) and null bytes/gib when unknown; ledger_total gains includes_manual_overhead_only and unknown_overhead_excluded; subtotal unchanged; explicit manual 0 is kind manual_bound, unknown false, bytes 0.",
+      "verification": "tests/test_ledger.py unknown-semantics tests; CLI prints 'unknown (unknown_not_estimated)'; wheel smoke asserts bytes is None."
+    },
+    {
+      "gap": "fabricated TDD claim (first red run was only collection errors)",
+      "change": "tests/test_legacy_regression.py freezes the legacy public calculate_vram (git 2dcb9ff) under tests/fixtures and runs the same release requirement against it and against the final API.",
+      "verification": "legacy fails the requirement with a real AssertionError (KV 1.09 GiB vs 469762048 B; invented numeric overhead), final compute_ledger passes."
+    }
+  ],
+
+  "screenshots": [
+    "validation/screenshots/firefox-360-mobile.png",
+    "validation/screenshots/firefox-1280-desktop.png",
+    "validation/screenshots/firefox-1280-invalid-url-notice.png",
+    "validation/screenshots/desktop-1280-default.png",
+    "validation/screenshots/desktop-1280-qwen3-32k-batch2.png",
+    "validation/screenshots/desktop-1280-invalid-url-notice.png",
+    "validation/screenshots/mobile-360.png"
+  ],
+  "visual_review": "Firefox 360px and 1280px renders inspected with vision after the run: single column at 360 px with no horizontal overflow, original dark style unchanged, ledger rows aligned, 'Runtime overhead - unknown · not estimated' (em dash, no numeric 0.000 GiB). Desktop 1280 px matches the original design with the honest labels.",
+  "telemetry": "none added; test_page_ships_no_telemetry_or_tracking asserts the built page has no analytics/beacon/tracker surface, and the page still has no fetch/XHR/external scripts.",
+
+  "limitations": [
+    "No GPU/runtime measurement: verification.gpu_runtime_checked stays false everywhere; there is no real hardware figure in this revision.",
+    "Benchmark is disabled, not fixed: no tokens/s is claimed anywhere, and re-enabling it needs a redesigned bounded local probe (pinned endpoint, no redirects, explicit [DONE], wall-clock deadline).",
+    "Chromium in this sandbox is the system build 156 driven via executable_path because the bundled playwright chromium build is absent from the image; CI installs both playwright browsers, so CI coverage is the canonical one.",
+    "Firefox clipboard reads rely on Firefox's own testing preference (dom.events.testing.asyncClipboard). The production code path is untouched and still uses navigator.clipboard with a DOM execCommand fallback; the preference only lets the test read the real clipboard.",
+    "JS bounds mirror Python (1 TiB KV, 33 554 432 positions, batch 4096), but the browser sanitises (clamp + notice) where the CLI refuses; this asymmetry is intentional for a UI and is covered by tests on both sides.",
+    "Explicit manual overhead 0 is preserved as an explicit zero bound in the UI/URL/report, but core compute_ledger still treats manual_overhead_gib=0 as provided=manual_bound (covered), so there is no 'unknown' ambiguity left in the JSON.",
+    "No push/merge/publication, no external writes, no production pipeline or publication-policy change; GitHub Pages content is not redeployed.",
+    "Spec reviewer was running against an older snapshot; this file records only this worker's own executed evidence and the parent must recheck the final tree."
+  ],
+
+  "files_changed": [
+    "vramcalc/bench.py",
+    "vramcalc/cli.py",
+    "vramcalc/core.py",
+    "vramcalc/errors.py",
+    "web/state.js",
+    "web/app.js",
+    "index.html (regenerated)",
+    "tests/test_bench.py",
+    "tests/test_ledger.py",
+    "tests/test_ui.py",
+    "tests/test_web_static.py",
+    "tests/test_legacy_regression.py (new)",
+    "tests/fixtures/legacy_vram_calc_2dcb9ff.py (new, frozen legacy source)",
+    "tests/node/state.test.cjs",
+    ".github/workflows/ci.yml",
+    "README.md",
+    "docs/quickstart.en.md",
+    "validation/implementation_result.json",
+    "validation/red_green_evidence.md",
+    "validation/revision_result.json"
+  ]
+}

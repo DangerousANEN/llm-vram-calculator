@@ -1,0 +1,196 @@
+{
+  "worker": "implementation",
+  "model": "deepseek-v4.1-flash-1017",
+  "phase": "P0-03/04/05/06 - first product phase",
+  "repo": "/root/projects/llm-vram-calculator-v2",
+  "branch": "feat/config-grounded-growth-v2",
+  "commit": "857bd8f",
+  "commit_subject": "feat: config-grounded memory ledger, pinned Qwen fixtures, honest bench, validated share UI",
+  "pushed": false,
+  "merged": false,
+  "published": false,
+  "old_checkout_untouched": "/root/projects/llm-vram-calculator (not modified)",
+  "production_policy_changed": false,
+  "weights_downloaded": false,
+
+  "environment": {
+    "tests_executed_on": "isolated docker container zexkora-growth-sandbox (image zexkora-test-sandbox:20261107), bind mount /root/projects/llm-vram-calculator-v2 -> /workspace",
+    "host_test_execution": "none (only py_compile syntax check on host, no application tests)",
+    "container": {
+      "python": "3.13.18",
+      "pytest": "9.2.0",
+      "node": "v20.19.2",
+      "chromium": "/usr/bin/chromium 156.0.8078.79 (system binary; bundled playwright chromium absent in this image)",
+      "firefox": "playwright firefox-1555 / 157.0 bundled in the container; system firefox-esr fallback"
+    }
+  },
+
+  "changed_files": [
+    "vramcalc/__init__.py (new package public API)",
+    "vramcalc/__main__.py (python -m vram_calc)",
+    "vramcalc/errors.py (typed refusals with stable codes)",
+    "vramcalc/core.py (architecture gate, KV geometry, ledger, legacy heuristic)",
+    "vramcalc/catalog.py (offline catalogue access, quant lookup, estimate path)",
+    "vramcalc/bench.py (temporarily disabled: structured benchmark_disabled refusal, no network transport)",
+    "vramcalc/cli.py (models/calc/bench, --json, legacy migration, refusals)",
+    "vramcalc/data/models.json (2 revision-pinned fixtures, exact byte sums, config sha256)",
+    "vram_calc.py (replaced by deprecated shim delegating to the package)",
+    "web/template.html (new self-contained page shell)",
+    "web/styles.css (responsive, 360px-safe, no horizontal overflow)",
+    "web/state.js (pure URL-state validation, ledger math, report text)",
+    "web/app.js (page controller, copy report/link, Telegram chooser)",
+    "index.html (regenerated: catalogue + state.js + app.js + css inlined)",
+    "scripts/fetch_model_metadata.py (metadata-only fixture builder + --check)",
+    "scripts/build_web.py (deterministic page build + --check CI guard)",
+    "tests/conftest.py",
+    "tests/test_architecture_gate.py",
+    "tests/test_ledger.py",
+    "tests/test_catalog_fixtures.py",
+    "tests/test_cli.py",
+    "tests/test_bench.py",
+    "tests/test_web_static.py",
+    "tests/test_ui.py",
+    "tests/node/state.test.cjs",
+    ".github/workflows/ci.yml (tests 3.9/3.11/3.13 + node + build smoke + UI job)",
+    ".gitignore",
+    "pyproject.toml (package metadata, entry points, package-data, pytest config)",
+    "README.md (rewritten RU: formula, units, limits, migration, tests, links)",
+    "docs/quickstart.en.md (new EN quickstart)",
+    "validation/red_green_evidence.md",
+    "validation/sandbox_test_run.log",
+    "validation/screenshots/desktop-1280-default.png",
+    "validation/screenshots/desktop-1280-qwen3-32k-batch2.png",
+    "validation/screenshots/desktop-1280-invalid-url-notice.png",
+    "validation/screenshots/mobile-360.png"
+  ],
+
+  "tests": [
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 -m pytest -m 'not ui'",
+      "result": "125 passed, 19 deselected in 7.80s (revision round; supersedes the earlier 130-test count)",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox node tests/node/state.test.cjs",
+      "result": "state.test.cjs: OK (19 tests)",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 -m pytest -m ui tests/test_ui.py",
+      "result": "19 passed in 75.75s - chromium AND firefox, zero skips; a missing required browser now fails instead of skipping",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 scripts/build_web.py --check",
+      "result": "OK: index.html is up to date (47869 bytes)",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec -w /workspace zexkora-growth-sandbox python3 scripts/fetch_model_metadata.py --check",
+      "result": "OK: vramcalc/data/models.json matches upstream metadata for 2 models",
+      "status": "pass",
+      "note": "live network re-verification of config.json sha256 and file byte lists at the pinned revisions"
+    },
+    {
+      "command": "docker exec ... /tmp/bvenv/bin/python -m build --outdir /tmp/dist",
+      "result": "Successfully built llm_vram_calculator-2.0.0.tar.gz and llm_vram_calculator-2.0.0-py3-none-any.whl",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec ... /tmp/venv/bin/pip install /tmp/dist/llm_vram_calculator-2.0.0-py3-none-any.whl && vram-calc models|calc",
+      "result": "wheel installs in clean venv; catalogue ships inside wheel; qwen2.5 q4_k_m 8192 -> weights 4683073632 B, kv 469762048 B, total 5152835680 B (4.799 GiB), is_measured_vram=false, gpu_runtime_checked=false; --params refusal exit=2",
+      "status": "pass"
+    },
+    {
+      "command": "docker exec ... python3 -m pytest -q -m \"not ui\"   (revision round, unfixed source + new tests)",
+      "result": "11 failed, 114 passed, 19 deselected - real behavioural assertions, plus a genuine AssertionError from the frozen legacy calculate_vram against the same requirement",
+      "status": "red evidence before the revision fixes (supersedes the earlier collection-error run)"
+    }
+  ],
+
+  "red_green_evidence": "validation/red_green_evidence.md (pre-change CLI transcript 5.65 GB + invented 0.81 GB overhead + chunk-as-token bench code, then green runs)",
+
+  "model_fixtures": [
+    {
+      "id": "qwen2.5-7b-instruct",
+      "repo": "Qwen/Qwen2.5-7B-Instruct",
+      "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "config_sha256": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c",
+      "gguf_repo": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+      "gguf_revision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+      "license": "apache-2.0",
+      "geometry": {"num_hidden_layers": 28, "num_attention_heads": 28, "num_key_value_heads": 4, "head_dim": 128, "head_dim_source": "hidden_size/num_attention_heads", "max_position_embeddings": 32768},
+      "kv_bytes_per_token": 57344,
+      "weights_exact_bytes": {"bf16": 15231271888, "fp16": 15231271888, "q8_0": 8098525408, "q6_k": 6254198880, "q5_k_m": 5444831360, "q5_0": 5315176576, "q4_k_m": 4683073632, "q4_0": 4431390848, "q3_k_m": 3808391072, "q2_k": 3015940000},
+      "verified_ledger_q4_k_m_8192": {"weights_bytes": 4683073632, "kv_bytes": 469762048, "total_bytes": 5152835680}
+    },
+    {
+      "id": "qwen3-8b",
+      "repo": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "config_sha256": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+      "gguf_repo": "Qwen/Qwen3-8B-GGUF",
+      "gguf_revision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+      "license": "apache-2.0",
+      "geometry": {"num_hidden_layers": 36, "num_attention_heads": 32, "num_key_value_heads": 8, "head_dim": 128, "head_dim_source": "config.head_dim", "max_position_embeddings": 40960},
+      "kv_bytes_per_token": 147456,
+      "weights_exact_bytes": {"bf16": 16381516776, "fp16": 16381516776, "q8_0": 8709518112, "q6_k": 6725899040, "q5_k_m": 5851112224, "q5_0": 5720761152, "q4_k_m": 5027783488},
+      "verified_ledger_bf16_32768_b2": {"weights_bytes": 16381516776, "kv_bytes": 9663676416}
+    }
+  ],
+
+  "acceptance_mapping": {
+    "dense ledger with key+value*layers*kv_heads*head_dim*ctx*seq*cache_bytes": "vramcalc/core.py kv_bytes_per_token/kv_cache_bytes; tested in tests/test_architecture_gate.py (57344 B/token Qwen2.5-7B, 147456 B/token Qwen3-8B) and tests/test_ledger.py",
+    "weights from actual official file size, never MoE active params as resident": "vramcalc/data/models.json weights[].bytes = exact sums of official safetensors/GGUF shards at pinned revisions; MoE configs refused (moe_not_supported)",
+    "reject unknown architecture/MLA/hybrid/sliding window/offload": "stable codes unknown_architecture, mla_not_supported, hybrid_attention_not_supported, sliding_window_not_supported, offload_unsupported; covered by parametrised tests",
+    "only fp16/bf16 KV, no exact-cache claim for quantized": "KV_DTYPE_BYTES={fp16,bf16}; --kv-quant and any other dtype -> unsupported_kv_dtype",
+    "runtime overhead unknown/manual bound, total != measured VRAM": "runtime_overhead.kind = unknown_not_estimated | manual_bound with explicit unknown flag and null bytes/gib when unknown; ledger_total.is_measured_vram=false, is_fit_guarantee=false, unknown_overhead_excluded reflects it; verification.gpu_runtime_checked=false",
+    "invalid/nonfinite/excessive context and batch refused": "invalid_context/invalid_batch, context_exceeds_model_max, positions_too_large, kv_too_large, invalid_overhead/nonfinite_overhead",
+    "CLI legacy params usable via clear deprecation, not fake exact math": "legacy_params_removed with migration hint; --legacy-heuristic prints NOT CONFIG-GROUNDED and JSON config_grounded=false; python vram_calc.py shim prints deprecation",
+    "bench chunk-as-token fixed or disabled": "disabled for 2.0.0: no network transport ships, run_bench raises benchmark_disabled (exit 2) with a migration hint, a live endpoint observes zero requests, and no tokens/s figure is claimed anywhere",
+    "UI model/quant/context/batch, source/revision, units, unknown-runtime notice": "web/template.html + web/app.js; assertions in tests/test_ui.py",
+    "validated URL state + copy report + official Telegram share": "web/state.js parseState/buildQuery (node unit tests + UI reload test); t.me/share/url chooser; clipboard verified by reading navigator.clipboard",
+    "brand Zexkora Hub, GitHub Pages URLs only, no broken domain": "tests/test_web_static.py asserts absence of .llm hubs / ai.zxc1x1.ru and presence of only dangerousanen.github.io",
+    "360px mobile + desktop, keyboard, no horizontal overflow": "test_mobile_360_has_no_horizontal_overflow (scrollWidth <= clientWidth), test_keyboard_reachable_controls",
+    "README RU + docs/quickstart.en.md with limits/formula/run/tests/Telegram": "README.md, docs/quickstart.en.md, checked by test_readme_documents_limits_formula_and_tests",
+    "package/build/CI support": "pyproject.toml (entry points vram-calc/llm-vram-calc, package-data), python -m build verified, .github/workflows/ci.yml"
+  },
+
+  "screenshots": [
+    "validation/screenshots/firefox-360-mobile.png",
+    "validation/screenshots/firefox-1280-desktop.png",
+    "validation/screenshots/firefox-1280-invalid-url-notice.png",
+    "validation/screenshots/desktop-1280-default.png",
+    "validation/screenshots/desktop-1280-qwen3-32k-batch2.png",
+    "validation/screenshots/desktop-1280-invalid-url-notice.png",
+    "validation/screenshots/mobile-360.png"
+  ],
+  "visual_review": "Screenshots produced by real headless chromium and firefox and inspected with vision after the run. Defects found and fixed: (1) the 'exact official file' badge stretched across the row (CSS specificity, now inline-block), (2) runtime overhead rendered as 0.000 GiB for an unknown quantity (now an em dash + 'unknown · not estimated' in UI, CLI, JSON and copied report). Revision re-check: Firefox 360 px single column with no clipping, Firefox/Chromium 1280 px ledger rows aligned, notices visible, original dark style intact.",
+
+  "limits": [
+    "No GPU/runtime measurement was performed anywhere: gpu_runtime_checked is false by design and stated in CLI, page, README and docs.",
+    "The ledger models only full uniform attention with fp16/bf16 KV. MoE, MLA, sliding windows, hybrid per-layer attention, quantized KV and partial offload are refused.",
+    "Tensor parallel replication, CUDA graphs, paged-attention block padding, prefix caching and tokenizer/server overhead are not modelled.",
+    "Context is capped at each config's max_position_embeddings (Qwen2.5-7B: 32768). Qwen2.5 YaRN/rope extrapolation to 131072 is not modelled, although the model card mentions it.",
+    "Qwen3-8B publishes no official q4_0/q3_k_m/q2_k GGUF, so those quants are refused and only available as a labelled bytes/parameter estimate (CLI --allow-estimate; not exposed in the UI).",
+    "Firefox UI verification is now real: the container ships playwright firefox-1555 (157.0); the revision runs the same UI suite in chromium and firefox (19/19, zero skips) and captures Firefox 360 px / 1280 px screenshots.",
+    "Telegram share only opens the official t.me/share/url chooser. No message was posted, no external write was performed, and none was verified.",
+    "GitHub Pages content and deployment are NOT updated: index.html is regenerated in the repo but not pushed; publication needs parent approval and a readback of the deployed page."
+  ],
+
+  "spec_gaps": [
+    "Contract output #1 (planning/baseline_20261107.md + asset_inventory.json with live 62 subscribers and bot inventory) is outside this worker's P0-03..06 scope and was not produced here.",
+    "Contract output #8 (updating active_backlog.json with truthful task states) is the parent's durable-backlog duty; this worker only reports its own evidence.",
+    "Benchmark is disabled, not measured: this revision deliberately ships no probe, so no real-provider tokens/s exists to demonstrate. That is the accepted scope for 2.0.0; a bounded local probe needs a redesign.",
+    "Qwen2.5-7B 'fp16' weights reuse the bf16 safetensors byte sum (same 2 bytes/parameter); the JSON labels this explicitly as official_safetensors_size_equivalent rather than a separate fp16 repository.",
+    "UI does not expose the estimate path, KV dtype beyond fp16/bf16, or multi-model comparison; deliberately out of this phase.",
+    "No external distribution (Show and Tell / awesome-list PR) was attempted: the contract gates those on a verified release and parent approval."
+  ],
+
+  "open_approvals_for_parent": [
+    "review screenshots and UI copy (validation/screenshots)",
+    "approve push of branch feat/config-grounded-growth-v2 and PR/merge",
+    "approve GitHub Pages regeneration and read back the deployed index.html",
+    "decide whether to stop container zexkora-growth-sandbox (still running, idle, 1.5GB limit, no heavy process)"
+  ]
+}

@@ -1,0 +1,169 @@
+FFFFFFFF.                                                                [100%]
+=================================== FAILURES ===================================
+____ test_fractional_context_and_batch_are_not_silently_truncated[chromium] ____
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=1&b=1'>
+
+    def test_fractional_context_and_batch_are_not_silently_truncated(page):
+        """'1.5' must not become context 1: it is refused with a visible notice."""
+        page.fill("#ctx", "1.5")
+        page.dispatch_event("#ctx", "change")
+>       assert not page.is_hidden("#notices"), "a fractional context must raise a visible notice"
+E       AssertionError: a fractional context must raise a visible notice
+E       assert not True
+E        +  where True = is_hidden('#notices')
+E        +    where is_hidden = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=1&b=1'>.is_hidden
+
+tests/test_ui.py:353: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:38] "GET /index.html HTTP/1.1" 200 -
+____ test_fractional_context_and_batch_are_not_silently_truncated[firefox] _____
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=1&b=1'>
+
+    def test_fractional_context_and_batch_are_not_silently_truncated(page):
+        """'1.5' must not become context 1: it is refused with a visible notice."""
+        page.fill("#ctx", "1.5")
+        page.dispatch_event("#ctx", "change")
+>       assert not page.is_hidden("#notices"), "a fractional context must raise a visible notice"
+E       AssertionError: a fractional context must raise a visible notice
+E       assert not True
+E        +  where True = is_hidden('#notices')
+E        +    where is_hidden = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=1&b=1'>.is_hidden
+
+tests/test_ui.py:353: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:44] "GET /index.html HTTP/1.1" 200 -
+___________ test_blank_numeric_field_is_explicitly_noticed[chromium] ___________
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=8192&b=1'>
+
+    def test_blank_numeric_field_is_explicitly_noticed(page):
+        """An emptied field must never silently mean the default."""
+        page.fill("#ctx", "")
+        page.dispatch_event("#ctx", "change")
+>       assert not page.is_hidden("#notices"), "an emptied context field must raise a visible notice"
+E       AssertionError: an emptied context field must raise a visible notice
+E       assert not True
+E        +  where True = is_hidden('#notices')
+E        +    where is_hidden = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=8192&b=1'>.is_hidden
+
+tests/test_ui.py:375: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:47] "GET /index.html HTTP/1.1" 200 -
+___________ test_blank_numeric_field_is_explicitly_noticed[firefox] ____________
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=8192&b=1'>
+
+    def test_blank_numeric_field_is_explicitly_noticed(page):
+        """An emptied field must never silently mean the default."""
+        page.fill("#ctx", "")
+        page.dispatch_event("#ctx", "change")
+>       assert not page.is_hidden("#notices"), "an emptied context field must raise a visible notice"
+E       AssertionError: an emptied context field must raise a visible notice
+E       assert not True
+E        +  where True = is_hidden('#notices')
+E        +    where is_hidden = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=bf16&c=8192&b=1'>.is_hidden
+
+tests/test_ui.py:375: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:50] "GET /index.html HTTP/1.1" 200 -
+________ test_fp16_badge_is_size_equivalent_not_an_exact_file[chromium] ________
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=fp16&c=8192&b=1'>
+
+    def test_fp16_badge_is_size_equivalent_not_an_exact_file(page):
+        """fp16 derives from bf16 official bytes: never claim a separate exact file."""
+        page.select_option("#quant", "fp16")
+        badge = page.inner_text("#out-weights-src").strip().lower()
+>       assert badge == "size equivalent", badge
+E       AssertionError: exact official file
+E       assert 'exact official file' == 'size equivalent'
+E         
+E         - size equivalent
+E         + exact official file
+
+tests/test_ui.py:390: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:53] "GET /index.html HTTP/1.1" 200 -
+________ test_fp16_badge_is_size_equivalent_not_an_exact_file[firefox] _________
+
+page = <Page url='http://127.0.0.1:38141/index.html?m=qwen2.5-7b-instruct&q=fp16&c=8192&b=1'>
+
+    def test_fp16_badge_is_size_equivalent_not_an_exact_file(page):
+        """fp16 derives from bf16 official bytes: never claim a separate exact file."""
+        page.select_option("#quant", "fp16")
+        badge = page.inner_text("#out-weights-src").strip().lower()
+>       assert badge == "size equivalent", badge
+E       AssertionError: exact official file
+E       assert 'exact official file' == 'size equivalent'
+E         
+E         - size equivalent
+E         + exact official file
+
+tests/test_ui.py:390: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:55] "GET /index.html HTTP/1.1" 200 -
+_________________ test_fp16_size_equivalent_mobile_screenshot __________________
+
+browsers = {'chromium': <Browser type=<BrowserType name=chromium executable_path=/root/.cache/ms-playwright/chromium-1248/chrome-...type=<BrowserType name=firefox executable_path=/root/.cache/ms-playwright/firefox-1555/firefox/firefox> version=157.0>}
+server = 'http://127.0.0.1:38141/index.html'
+screenshots_dir = PosixPath('/workspace/validation/screenshots')
+
+    def test_fp16_size_equivalent_mobile_screenshot(browsers, server, screenshots_dir):
+        """Mobile (360px) proof of the size-equivalent badge, both browsers."""
+        for name in REQUIRED_BROWSERS:
+            context = _new_context(
+                browsers[name], name, viewport={"width": 360, "height": 740}, device_scale_factor=2
+            )
+            page = context.new_page()
+            errors = []
+            page.on("pageerror", lambda exc: errors.append(str(exc)))
+            page.goto(server)
+            page.wait_for_selector("#out-total")
+            page.select_option("#quant", "fp16")
+>           assert page.inner_text("#out-weights-src").strip().lower() == "size equivalent"
+E           AssertionError: assert 'exact official file' == 'size equivalent'
+E             
+E             - size equivalent
+E             + exact official file
+
+tests/test_ui.py:425: AssertionError
+----------------------------- Captured stderr call -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:57] "GET /index.html HTTP/1.1" 200 -
+________ test_copy_failure_is_reported_as_failure_with_selectable_text _________
+
+browsers = {'chromium': <Browser type=<BrowserType name=chromium executable_path=/root/.cache/ms-playwright/chromium-1248/chrome-...type=<BrowserType name=firefox executable_path=/root/.cache/ms-playwright/firefox-1555/firefox/firefox> version=157.0>}
+server = 'http://127.0.0.1:38141/index.html'
+screenshots_dir = PosixPath('/workspace/validation/screenshots')
+
+    def test_copy_failure_is_reported_as_failure_with_selectable_text(browsers, server, screenshots_dir):
+        """Both copy paths refused -> honest failure status + selectable report text."""
+        for name in REQUIRED_BROWSERS:
+            context, page, errors = _injected_page(
+                browsers, name, server, COPY_DENIED_INIT, viewport={"width": 360, "height": 740}, scale=2
+            )
+            expected = page.evaluate("() => document.getElementById('share-tg').dataset.report")
+            _assert_copy_simulation(page, False)
+            page.click("#copy-report")
+            page.wait_for_function("document.getElementById('status').textContent.length > 0", timeout=5000)
+            status = page.inner_text("#status").lower()
+>           assert "copied to clipboard" not in status, status
+E           AssertionError: report copied to clipboard.
+E           assert 'copied to clipboard' not in 'report copi...o clipboard.'
+E             
+E             'copied to clipboard' is contained here:
+E               report copied to clipboard.
+
+tests/test_ui.py:446: AssertionError
+----------------------------- Captured stderr call -----------------------------
+127.0.0.1 - - [07/Nov/2026 11:50:59] "GET /index.html HTTP/1.1" 200 -
+=========================== short test summary info ============================
+FAILED tests/test_ui.py::test_fractional_context_and_batch_are_not_silently_truncated[chromium]
+FAILED tests/test_ui.py::test_fractional_context_and_batch_are_not_silently_truncated[firefox]
+FAILED tests/test_ui.py::test_blank_numeric_field_is_explicitly_noticed[chromium]
+FAILED tests/test_ui.py::test_blank_numeric_field_is_explicitly_noticed[firefox]
+FAILED tests/test_ui.py::test_fp16_badge_is_size_equivalent_not_an_exact_file[chromium]
+FAILED tests/test_ui.py::test_fp16_badge_is_size_equivalent_not_an_exact_file[firefox]
+FAILED tests/test_ui.py::test_fp16_size_equivalent_mobile_screenshot - Assert...
+FAILED tests/test_ui.py::test_copy_failure_is_reported_as_failure_with_selectable_text

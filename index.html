@@ -1,534 +1,1222 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LLM VRAM & KV-Cache Calculator — .llm hubs</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-dark: #0a0d14;
-            --card-bg: #121722;
-            --card-inner: #192030;
-            --border-color: #242e42;
-            --border-hover: #00d2ff;
-            --text-main: #f0f6fc;
-            --text-muted: #8b9bb4;
-            --accent-cyan: #00d2ff;
-            --accent-green: #2ecc71;
-            --accent-purple: #a855f7;
-            --accent-red: #ff5252;
-            --accent-orange: #ff9f43;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+<title>Zexkora Hub — калькулятор VRAM и KV-кэша (config-grounded)</title>
+<meta name="description" content="Честный расчёт памяти под dense-модели: веса из официальных файлов, KV-кэш по геометрии конфига, явные пределы. Qwen2.5-7B-Instruct и Qwen3-8B с закреплёнными ревизиями.">
+<meta property="og:title" content="Zexkora Hub — калькулятор VRAM и KV-кэша">
+<meta property="og:description" content="Config-grounded ledger: веса + KV-кэш + честно неизвестный runtime overhead. Без выдуманных «точных» цифр.">
+<meta property="og:type" content="website">
+<style>
+:root {
+  --bg: #070b14;
+  --bg-2: #0d1424;
+  --card: rgba(17, 26, 43, 0.86);
+  --line: #1e2b44;
+  --text: #e8eefc;
+  --muted: #94a3bd;
+  --accent: #00d2ff;
+  --accent-2: #7c5cff;
+  --warn: #ffb347;
+  --danger: #ff6b6b;
+  --ok: #37e0a4;
+  --radius: 14px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
+* { box-sizing: border-box; }
 
-        body {
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            padding: 16px;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
+html, body {
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
 
-        .container {
-            width: 100%;
-            max-width: 680px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+body {
+  background:
+    radial-gradient(1100px 520px at 12% -10%, rgba(0, 210, 255, 0.14), transparent 60%),
+    radial-gradient(900px 480px at 92% 0%, rgba(124, 92, 255, 0.14), transparent 62%),
+    var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
 
-        .header {
-            background: linear-gradient(135deg, rgba(0, 210, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 20px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px 16px 56px;
+}
 
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
-        }
+header.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 22px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+}
 
-        .badge {
-            display: inline-block;
-            background: rgba(0, 210, 255, 0.12);
-            color: var(--accent-cyan);
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            padding: 4px 10px;
-            border-radius: 20px;
-            border: 1px solid rgba(0, 210, 255, 0.3);
-            margin-bottom: 8px;
-        }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
-        .header h1 {
-            font-size: 22px;
-            font-weight: 800;
-            color: #fff;
-            margin-bottom: 6px;
-            letter-spacing: -0.5px;
-        }
+.brand .bolt { font-size: 1.4rem; }
 
-        .header p {
-            font-size: 13px;
-            color: var(--text-muted);
-            line-height: 1.4;
-        }
+.brand strong { font-size: 1.02rem; letter-spacing: 0.01em; }
 
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+.brand .tag {
+  font-size: 0.74rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
 
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+nav.links { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 0.86rem; }
 
-        label {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: flex;
-            justify-content: space-between;
-        }
+a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+a:hover, a:focus-visible { text-decoration: underline; }
 
-        .val-badge {
-            color: var(--accent-cyan);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-        }
+h1 {
+  font-size: clamp(1.45rem, 4.2vw, 2.1rem);
+  line-height: 1.2;
+  margin: 0 0 8px;
+}
 
-        select, input[type="range"] {
-            width: 100%;
-        }
+.sub { color: var(--muted); margin: 0 0 20px; max-width: 70ch; font-size: 0.95rem; }
 
-        select {
-            background-color: var(--card-inner);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 12px 14px;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            outline: none;
-            transition: border-color 0.2s;
-            cursor: pointer;
-        }
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
 
-        select:focus {
-            border-color: var(--accent-cyan);
-        }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); align-items: start; }
+}
 
-        input[type="range"] {
-            accent-color: var(--accent-cyan);
-            cursor: pointer;
-        }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-width: 0;
+}
 
-        .grid-options {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
+.card h2 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--muted);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
 
-        .opt-btn {
-            background-color: var(--card-inner);
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s;
-        }
+.field { margin-bottom: 14px; min-width: 0; }
+.field:last-child { margin-bottom: 0; }
 
-        .opt-btn.active {
-            background: rgba(0, 210, 255, 0.15);
-            border-color: var(--accent-cyan);
-            color: var(--accent-cyan);
-        }
+label.lbl {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
 
-        /* Results Display */
-        .results-box {
-            background: linear-gradient(180deg, #161e2e 0%, #111724 100%);
-            border: 1px solid rgba(0, 210, 255, 0.3);
-            border-radius: 14px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+label.lbl .hint { font-size: 0.74rem; color: #6b7c99; }
 
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-        }
+select, input[type="number"] {
+  width: 100%;
+  max-width: 100%;
+  background: #0a1120;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 0.92rem;
+  font-family: inherit;
+}
 
-        .metric-name {
-            color: var(--text-muted);
-        }
+select:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
-        .metric-val {
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 700;
-            color: #fff;
-        }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 
-        .metric-total {
-            border-top: 1px solid var(--border-color);
-            padding-top: 10px;
-            margin-top: 4px;
-        }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0 0; }
 
-        .metric-total .metric-name {
-            font-size: 15px;
-            font-weight: 800;
-            color: #fff;
-        }
+.ledger { display: grid; gap: 2px; }
 
-        .metric-total .metric-val {
-            font-size: 20px;
-            color: var(--accent-cyan);
-        }
+.ledger .line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 0.94rem;
+}
 
-        .gpu-recommendation {
-            background-color: rgba(46, 204, 113, 0.1);
-            border: 1px solid rgba(46, 204, 113, 0.3);
-            border-radius: 10px;
-            padding: 12px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+.ledger .line:last-child { border-bottom: 0; }
 
-        .gpu-icon {
-            font-size: 24px;
-        }
+.ledger .k { color: var(--muted); min-width: 0; }
+.ledger .k small { display: block; color: #6b7c99; font-size: 0.75rem; }
 
-        .gpu-info {
-            display: flex;
-            flex-direction: column;
-        }
+/* the source badge must hug its text instead of stretching across the row */
+.ledger .k small.badge {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--ok);
+  border-color: rgba(55, 224, 164, 0.4);
+}
+.ledger .v { text-align: right; font-variant-numeric: tabular-nums; }
 
-        .gpu-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            font-weight: 700;
-            color: var(--accent-green);
-            letter-spacing: 0.5px;
-        }
+.ledger .v b { display: block; font-size: 1.02rem; }
+.ledger .v span { display: block; font-size: 0.74rem; color: #7d8ca8; font-family: var(--mono); }
 
-        .gpu-name {
-            font-size: 14px;
-            font-weight: 700;
-            color: #fff;
-        }
+.total .v b { color: var(--accent); }
 
-        /* CTAs */
-        .actions {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
+.badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
 
-        .btn {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-            padding: 14px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 700;
-            text-decoration: none;
-            cursor: pointer;
-            border: none;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
+.badge.exact { color: var(--ok); border-color: rgba(55, 224, 164, 0.4); }
+.badge.est { color: var(--warn); border-color: rgba(255, 179, 71, 0.45); }
 
-        .btn:active {
-            transform: scale(0.98);
-        }
+.notice {
+  border: 1px solid rgba(255, 179, 71, 0.4);
+  background: rgba(255, 179, 71, 0.08);
+  color: #ffd79b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  margin-top: 14px;
+}
 
-        .btn-tg {
-            background: linear-gradient(135deg, #00d2ff 0%, #0088cc 100%);
-            color: #fff;
-            box-shadow: 0 4px 14px rgba(0, 136, 204, 0.3);
-        }
+.notice strong { color: #ffc978; }
 
-        .btn-gh {
-            background: #24292f;
-            border: 1px solid #333d4b;
-            color: #f0f6fc;
-        }
+.formula {
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  color: #8fa1c0;
+  background: #0a1120;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
 
-        .footer {
-            text-align: center;
-            font-size: 12px;
-            color: var(--text-muted);
-            padding: 12px 0 24px;
-            line-height: 1.5;
-        }
+.prov { font-size: 0.84rem; color: var(--muted); display: grid; gap: 6px; }
+.prov code { font-family: var(--mono); font-size: 0.78rem; color: #b9c8e2; overflow-wrap: anywhere; }
 
-        .footer a {
-            color: var(--accent-cyan);
-            text-decoration: none;
-        }
-    </style>
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+button {
+  font-family: inherit;
+  font-size: 0.86rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #101a2c;
+  color: var(--text);
+  padding: 9px 13px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.9), rgba(124, 92, 255, 0.9));
+  color: #051019;
+  font-weight: 600;
+  border: 0;
+}
+
+button:hover { border-color: #2d4368; }
+
+ul.limits { margin: 0; padding-left: 18px; font-size: 0.84rem; color: var(--muted); }
+ul.limits li { margin-bottom: 6px; overflow-wrap: anywhere; }
+
+.status {
+  min-height: 1.2em;
+  font-size: 0.8rem;
+  color: var(--ok);
+  margin-top: 6px;
+}
+
+/* manual-copy offer: shown only when every automatic copy path failed */
+.copy-fallback { margin-top: 10px; }
+.copy-fallback[hidden] { display: none; }
+.copy-fallback p { margin: 0 0 6px; font-size: 0.82rem; color: #ffd79b; }
+.copy-fallback textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 150px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: #0a1120;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.prov-note { margin: 4px 0 0; font-size: 0.82rem; color: #b9c8e2; }
+
+footer.bottom {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: #6b7c99;
+  font-size: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 400px) {
+  .wrap { padding: 14px 11px 44px; }
+  .row2 { grid-template-columns: minmax(0, 1fr); }
+  .ledger .line { font-size: 0.9rem; }
+}
+
+</style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="container">
-    <div class="header">
-        <span class="badge">.llm hubs lab</span>
-        <h1>Калькулятор VRAM и KV-кэша</h1>
-        <p>Точный расчет памяти для инференса локальных моделей: веса, длина контекста (8K–128K), тип внимания и подбор GPU</p>
+  <header class="top">
+    <div class="brand">
+      <span class="bolt" aria-hidden="true">⚡</span>
+      <strong>Zexkora Hub</strong>
+      <span class="tag">config-grounded ledger</span>
     </div>
+    <nav class="links" aria-label="Official links">
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator" rel="noopener noreferrer">GitHub repo</a>
+      <a href="https://dangerousanen.github.io/llm-vram-calculator/" rel="noopener noreferrer">GitHub Pages</a>
+      <a href="https://t.me/zexkora_hub" rel="noopener noreferrer">Telegram @zexkora_hub</a>
+    </nav>
+  </header>
 
-    <div class="card">
-        <div class="form-group">
-            <label>Модель нейросети</label>
-            <select id="modelSelect" onchange="calculate()">
-                <option value="llama-3.1-8b">Llama 3.1 8B (GQA 8 KV, 32 слоя)</option>
-                <option value="qwen-2.5-7b">Qwen 2.5 7B (GQA 4 KV, 28 слоев)</option>
-                <option value="qwen-2.5-14b">Qwen 2.5 14B (GQA 8 KV, 48 слоев)</option>
-                <option value="qwen-3.8-27b">Qwen 3.8 27B (GQA 8 KV, 64 слоя - New)</option>
-                <option value="qwen-2.5-32b">Qwen 2.5 32B (GQA 8 KV, 64 слоя)</option>
-                <option value="deepseek-r1-distill-32b">DeepSeek R1 Distill 32B (Reasoning)</option>
-                <option value="llama-3.3-70b">Llama 3.3 70B (GQA 8 KV, 80 слоев)</option>
-                <option value="mistral-large-123b">Mistral Large 123B (GQA 8 KV)</option>
-                <option value="deepseek-v3-671b">DeepSeek V3 / R1 671B (MLA 512d, MoE)</option>
-                <option value="gemma-2-9b">Gemma 2 9B (MHA - без GQA, 42 слоя)</option>
+  <main>
+    <h1>Сколько памяти реально нужно модели</h1>
+    <p class="sub">
+      Веса берутся из <b>официальных файлов</b> на закреплённой ревизии Hugging Face, KV-кэш считается по
+      геометрии самого конфига (layers × KV heads × head_dim), а runtime overhead <b>не выдумывается</b>.
+      Итог — бухгалтерская сумма байт, а не измеренная VRAM и не гарантия запуска.
+    </p>
+
+    <div class="grid">
+
+      <section class="card" aria-labelledby="controls-h">
+        <h2 id="controls-h">Параметры</h2>
+
+        <div class="field">
+          <label class="lbl" for="model">Модель <span class="hint">только поддерживаемые dense</span></label>
+          <select id="model" name="model"></select>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="quant">Квантование весов <span class="hint">официальные файлы</span></label>
+          <select id="quant" name="quant"></select>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="ctx">Контекст, токенов <span class="hint" id="ctx-max">max —</span></label>
+          <input id="ctx" name="ctx" type="number" inputmode="numeric" min="1" step="1" value="8192">
+          <input id="ctxRange" type="range" min="256" max="8192" step="256" value="8192" aria-label="Context size slider">
+        </div>
+
+        <div class="field row2">
+          <div>
+            <label class="lbl" for="batch">Параллельных последовательностей</label>
+            <input id="batch" name="batch" type="number" inputmode="numeric" min="1" max="4096" step="1" value="1">
+          </div>
+          <div>
+            <label class="lbl" for="kvdtype">Тип KV</label>
+            <select id="kvdtype" name="kvdtype">
+              <option value="fp16">fp16 (2 Б)</option>
+              <option value="bf16">bf16 (2 Б)</option>
             </select>
+          </div>
         </div>
 
-        <div class="form-group">
-            <label>Квантование весов</label>
-            <div class="grid-options" id="quantGroup">
-                <div class="opt-btn" onclick="setQuant('fp16')">FP16 / BF16</div>
-                <div class="opt-btn" onclick="setQuant('fp8')">FP8</div>
-                <div class="opt-btn active" onclick="setQuant('q4_k_m')">Q4_K_M (4-bit)</div>
-            </div>
+        <div class="field">
+          <label class="lbl" for="overhead">Ручной запас на overhead, GiB
+            <span class="hint">необязательно, не оценка</span></label>
+          <input id="overhead" name="overhead" type="number" inputmode="decimal" min="0" max="4096" step="0.5" placeholder="например 1.0, если измерили">
         </div>
 
-        <div class="form-group">
-            <label>
-                <span>Длина контекста (Токены)</span>
-                <span class="val-badge" id="contextLabel">8 192</span>
-            </label>
-            <input type="range" id="contextRange" min="2048" max="131072" step="2048" value="8192" oninput="updateContext(this.value)">
+        <div class="notice" id="notices" hidden></div>
+      </section>
+
+      <section class="card" aria-labelledby="ledger-h">
+        <h2 id="ledger-h">Ledger памяти</h2>
+        <div class="ledger">
+          <div class="line">
+            <div class="k">Веса модели <small id="out-weights-src" class="badge exact">exact</small></div>
+            <div class="v"><b id="out-weights">—</b><span id="out-weights-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">KV-кэш <small id="out-kv-pertoken">—</small></div>
+            <div class="v"><b id="out-kv">—</b><span id="out-kv-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">Промежуточный итог <small>веса + KV</small></div>
+            <div class="v"><b id="out-subtotal">—</b><span id="out-subtotal-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">Runtime overhead <small id="out-overhead-bytes">неизвестен · не оценивается</small></div>
+            <div class="v"><b id="out-overhead">—</b></div>
+          </div>
+          <div class="line total">
+            <div class="k"><b>Ledger total</b> <small>арифметическая сумма, НЕ измеренная VRAM</small></div>
+            <div class="v"><b id="out-total">—</b><span id="out-total-bytes">—</span></div>
+          </div>
         </div>
 
-        <div class="form-group">
-            <label>Квантование KV-кэша</label>
-            <div class="grid-options" id="kvGroup">
-                <div class="opt-btn active" onclick="setKVDtype('fp16')">FP16 (Дефолт)</div>
-                <div class="opt-btn" onclick="setKVDtype('fp8')">FP8 (2x сжатие)</div>
-                <div class="opt-btn" onclick="setKVDtype('q4')">Q4 (4x сжатие)</div>
-            </div>
-        </div>
+        <div class="formula" id="formula"></div>
 
-        <div class="results-box">
-            <div class="metric-row">
-                <span class="metric-name">Вес модели в VRAM:</span>
-                <span class="metric-val" id="weightsVal">4.8 ГБ</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-name">KV-кэш контекста:</span>
-                <span class="metric-val" id="kvVal">0.5 ГБ</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-name">CUDA Runtime & активации:</span>
-                <span class="metric-val" id="overheadVal">1.5 ГБ</span>
-            </div>
-            <div class="metric-row metric-total">
-                <span class="metric-name">Всего необходимо VRAM:</span>
-                <span class="metric-val" id="totalVal">6.8 ГБ</span>
-            </div>
-        </div>
-
-        <div class="gpu-recommendation">
-            <div class="gpu-icon">⚡</div>
-            <div class="gpu-info">
-                <span class="gpu-title">Рекомендуемая видеокарта:</span>
-                <span class="gpu-name" id="gpuVal">RTX 3060 12GB / RTX 4060 Ti 16GB</span>
-            </div>
+        <div class="notice">
+          <strong>Это не вердикт «влезет».</strong> CUDA-контекст, фрагментация аллокатора, активации и
+          workspace-буферы зависят от рантайма и здесь не оценены. Учитывайте их отдельно, если измеряли.
         </div>
 
         <div class="actions">
-            <button onclick="shareToTelegram()" class="btn btn-share" style="background: rgba(0, 210, 255, 0.15); border: 1px solid #00d2ff; color: #00d2ff;">
-                <span>🚀 Поделиться расчетом в Telegram</span>
-            </button>
-            <a href="https://t.me/zexkora_hub" target="_blank" class="btn btn-tg">
-                <span>📢 Подписаться на Zexkora Hub</span>
-            </a>
-            <a href="https://github.com/DangerousANEN/llm-vram-calculator" target="_blank" class="btn btn-gh">
-                <span>⭐ CLI-скрипт на GitHub</span>
-            </a>
+          <button type="button" id="copy-report" class="primary">Скопировать отчёт</button>
+          <button type="button" id="copy-link">Скопировать ссылку</button>
+          <a id="share-tg" role="button" class="badge" href="https://t.me/share/url" target="_blank"
+             rel="noopener noreferrer">Поделиться в Telegram ↗</a>
         </div>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div class="copy-fallback" id="copy-fallback" hidden>
+          <p>
+            Автоматическое копирование недоступно: браузер отклонил доступ к буферу обмена. Текст отчёта
+            ниже уже выделен - скопируйте его вручную (Ctrl+C или Cmd+C).
+          </p>
+          <textarea id="copy-fallback-text" readonly rows="9" spellcheck="false"
+                    aria-label="Текст отчёта для ручного копирования"></textarea>
+        </div>
+        <p class="sr-only" id="results-live" aria-live="polite"></p>
+      </section>
     </div>
 
-    <div class="footer">
-        Разработано инженерной лабораторией <a href="https://t.me/zexkora_hub" target="_blank">Zexkora Hub (@zexkora_hub)</a>.<br>
-        Честные бенчмарки, физика нейросетей и разборы архитектур без воды.
+    <div class="grid" style="margin-top:18px">
+      <section class="card" aria-labelledby="prov-h">
+        <h2 id="prov-h">Источник данных</h2>
+        <div class="prov" id="prov"></div>
+      </section>
+
+      <section class="card" aria-labelledby="limits-h">
+        <h2 id="limits-h">Что модель расчёта НЕ учитывает</h2>
+        <ul class="limits" id="limits"></ul>
+      </section>
     </div>
+  </main>
+
+  <footer class="bottom">
+    <span>Zexkora Hub · open-source калькулятор, MIT. Без аналитики и без сбора идентификаторов.</span>
+    <span>
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator" rel="noopener noreferrer">Исходники</a> ·
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator/blob/main/docs/quickstart.en.md" rel="noopener noreferrer">Docs (EN)</a>
+    </span>
+  </footer>
 </div>
 
 <script>
-    // Init Telegram WebApp
-    if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
+/*!
+ * URL-state handling for the VRAM calculator.
+ *
+ * Pure functions only (no DOM), so the same code is unit-tested under node and
+ * used by the page. Every incoming value is validated against the pinned
+ * catalogue; nothing from the URL is trusted or evaluated.
+ *
+ * Bounds intentionally mirror vramcalc.core (MAX_CONTEXT_TOKENS, MAX_BATCH,
+ * MAX_POSITIONS, MAX_KV_BYTES) so the browser and the CLI accept/reject the
+ * same inputs instead of quietly producing different ledgers.
+ */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.VRAMState = factory();
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  var MAX_CONTEXT = 1048576;
+  var MAX_BATCH = 4096;
+  var MAX_POSITIONS = 33554432;
+  var MAX_KV_BYTES = 1099511627776; // 1 TiB
+  var MAX_OVERHEAD_GIB = 4096;
+  var KV_DTYPES = { fp16: 2, bf16: 2 };
+  var GIB = 1024 * 1024 * 1024;
+
+  function toInt(value, fallback) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? Math.trunc(value) : fallback;
+    }
+    if (typeof value !== "string") return fallback;
+    var trimmed = value.trim();
+    if (!/^[0-9]{1,9}$/.test(trimmed)) return fallback;
+    var n = parseInt(trimmed, 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function isBlank(raw) {
+    return raw === null || raw === undefined || String(raw).trim() === "";
+  }
+
+  /** Strict whole-number parse for user input: returns null instead of guessing. */
+  function parseWhole(raw) {
+    var s = String(raw).trim();
+    if (!/^[0-9]+$/.test(s)) return null;
+    var n = parseInt(s, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function stateError(code, message) {
+    var err = new Error(message);
+    err.code = code;
+    return err;
+  }
+
+  function modelById(catalog, id) {
+    if (!catalog || !catalog.models) return null;
+    var wanted = String(id || "").toLowerCase();
+    for (var i = 0; i < catalog.models.length; i += 1) {
+      var m = catalog.models[i];
+      if (String(m.id).toLowerCase() === wanted) return m;
+      if (m.short_name && String(m.short_name).toLowerCase() === wanted) return m;
+    }
+    return null;
+  }
+
+  function quantKeys(model) {
+    if (!model || !model.weights) return [];
+    var order = ["bf16", "fp16", "q8_0", "q6_k", "q5_k_m", "q5_0", "q4_k_m", "q4_0", "q3_k_m", "q2_k"];
+    var out = [];
+    for (var i = 0; i < order.length; i += 1) {
+      if (Object.prototype.hasOwnProperty.call(model.weights, order[i])) out.push(order[i]);
+    }
+    return out;
+  }
+
+  function maxContextOf(model) {
+    var cfg = (model && model.config) || {};
+    var v = toInt(cfg.max_position_embeddings, 0);
+    if (!v) return MAX_CONTEXT;
+    return Math.min(v, MAX_CONTEXT);
+  }
+
+  function geometryOf(model) {
+    var cfg = (model && model.config) || {};
+    var heads = toInt(cfg.num_attention_heads, 0);
+    var kvHeads = toInt(cfg.num_key_value_heads, heads);
+    var hidden = toInt(cfg.hidden_size, 0);
+    var headDim = toInt(cfg.head_dim, heads && hidden % heads === 0 ? hidden / heads : 0);
+    var layers = toInt(cfg.num_hidden_layers, 0);
+    return { heads: heads, kvHeads: kvHeads, hidden: hidden, headDim: headDim, layers: layers };
+  }
+
+  function kvBytesPerTokenFor(model, kvDtype) {
+    var elem = KV_DTYPES[kvDtype];
+    if (!elem) return 0;
+    var g = geometryOf(model);
+    return 2 * g.layers * g.kvHeads * g.headDim * elem;
+  }
+
+  /**
+   * Validate URL (or form) parameters.
+   * @returns {{state: object, notices: string[]}} never throws on bad values;
+   *          sanitises them and records a human-readable notice.
+   */
+  function parseState(search, catalog) {
+    var notices = [];
+    var params;
+    try {
+      params = new URLSearchParams(search || "");
+    } catch (err) {
+      params = new URLSearchParams("");
+      notices.push("The share link could not be parsed; showing defaults.");
     }
 
-    const MODELS = {
-        "llama-3.1-8b": { params: 8.03, layers: 32, kv_heads: 8, head_dim: 128, mla: false },
-        "qwen-2.5-7b": { params: 7.61, layers: 28, kv_heads: 4, head_dim: 128, mla: false },
-        "qwen-2.5-14b": { params: 14.7, layers: 48, kv_heads: 8, head_dim: 128, mla: false },
-        "qwen-3.8-27b": { params: 27.2, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
-        "qwen-2.5-32b": { params: 32.5, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
-        "deepseek-r1-distill-32b": { params: 32.8, layers: 64, kv_heads: 8, head_dim: 128, mla: false },
-        "llama-3.3-70b": { params: 70.6, layers: 80, kv_heads: 8, head_dim: 128, mla: false },
-        "mistral-large-123b": { params: 123.0, layers: 88, kv_heads: 8, head_dim: 128, mla: false },
-        "deepseek-v3-671b": { params: 671.0, layers: 61, kv_heads: 1, head_dim: 512, mla: true },
-        "gemma-2-9b": { params: 9.24, layers: 42, kv_heads: 16, head_dim: 256, mla: false }
-    };
-
-    let currentQuant = "q4_k_m";
-    let currentKVDtype = "fp16";
-    let currentContext = 8192;
-
-    function setQuant(q) {
-        currentQuant = q;
-        document.querySelectorAll("#quantGroup .opt-btn").forEach(btn => {
-            btn.classList.remove("active");
-            if (btn.innerText.toLowerCase().includes(q)) btn.classList.add("active");
-        });
-        calculate();
+    var catalogModels = (catalog && catalog.models) || [];
+    if (!catalogModels.length) {
+      throw new Error("catalogue is empty");
+    }
+    var model = modelById(catalog, params.get("m")) || catalogModels[0];
+    if (params.get("m") && !modelById(catalog, params.get("m"))) {
+      notices.push("Unknown model in the link; showing " + model.display_name + ".");
     }
 
-    function setKVDtype(dtype) {
-        currentKVDtype = dtype;
-        document.querySelectorAll("#kvGroup .opt-btn").forEach(btn => {
-            btn.classList.remove("active");
-            if (btn.innerText.toLowerCase().includes(dtype)) btn.classList.add("active");
-        });
-        calculate();
+    var quants = quantKeys(model);
+    var quant = String(params.get("q") || "").toLowerCase();
+    if (quants.indexOf(quant) === -1) {
+      if (quant) notices.push("Unsupported quantisation '" + quant + "' for this model; using " + quants[0] + ".");
+      quant = quants[0];
     }
 
-    function updateContext(val) {
-        currentContext = parseInt(val);
-        document.getElementById("contextLabel").innerText = currentContext.toLocaleString('ru-RU');
-        calculate();
+    var kvRaw = String(params.get("k") || "fp16").toLowerCase();
+    var kvDtype = kvRaw;
+    if (!Object.prototype.hasOwnProperty.call(KV_DTYPES, kvDtype)) {
+      notices.push("KV dtype '" + kvRaw + "' is not modelled (only fp16/bf16); using fp16.");
+      kvDtype = "fp16";
     }
 
-    function calculate() {
-        const modelId = document.getElementById("modelSelect").value;
-        const m = MODELS[modelId];
-
-        // 1. Weights
-        let bytesPerParam = 0.60; // Q4_K_M
-        if (currentQuant === "fp16") bytesPerParam = 2.0;
-        else if (currentQuant === "fp8") bytesPerParam = 1.0;
-        else if (currentQuant === "q4_k_m") bytesPerParam = 0.58;
-
-        const weightsGB = (m.params * 1e9 * bytesPerParam) / (1024**3);
-
-        // 2. KV Cache
-        let bytesPerElem = 2.0; // fp16
-        if (currentKVDtype === "fp8") bytesPerElem = 1.0;
-        else if (currentKVDtype === "q4") bytesPerElem = 0.5;
-
-        let kvBytes = 0;
-        if (m.mla) {
-            // MLA compressed KV
-            kvBytes = m.layers * m.head_dim * currentContext * bytesPerElem;
-        } else {
-            // GQA / MHA
-            kvBytes = 2 * m.layers * m.kv_heads * m.head_dim * currentContext * bytesPerElem;
-        }
-        const kvGB = kvBytes / (1024**3);
-
-        // 3. Overhead
-        let overheadGB = 1.5;
-        if (m.params > 60) overheadGB = 3.0;
-        else if (m.params > 30) overheadGB = 2.0;
-
-        const totalGB = weightsGB + kvGB + overheadGB;
-
-        // UI Update
-        document.getElementById("weightsVal").innerText = weightsGB.toFixed(1) + " ГБ";
-        document.getElementById("kvVal").innerText = kvGB.toFixed(2) + " ГБ";
-        document.getElementById("overheadVal").innerText = overheadGB.toFixed(1) + " ГБ";
-        document.getElementById("totalVal").innerText = totalGB.toFixed(1) + " ГБ";
-
-        // GPU match
-        let gpu = "RTX 3060 12GB";
-        if (totalGB <= 11.5) gpu = "RTX 3060 12GB / RTX 4060 Ti 16GB";
-        else if (totalGB <= 15.5) gpu = "RTX 4060 Ti 16GB / RTX 4080 16GB";
-        else if (totalGB <= 23.5) gpu = "RTX 3090 24GB / RTX 4090 24GB";
-        else if (totalGB <= 47.0) gpu = "2x RTX 3090 / 4090 (48 ГБ) или 1x A6000";
-        else if (totalGB <= 78.0) gpu = "1x A100 80GB / 4x RTX 3090";
-        else if (totalGB <= 150.0) gpu = "2x A100 80GB / H100 80GB";
-        else if (totalGB <= 320.0) gpu = "4x H100 80GB SXM";
-        else gpu = "8x H100 80GB SXM (Кластер инференса)";
-
-        document.getElementById("gpuVal").innerText = gpu;
+    // ---- context ---------------------------------------------------------
+    var maxCtx = maxContextOf(model);
+    var context = 8192;
+    var ctxRaw = params.get("c");
+    if (!isBlank(ctxRaw)) {
+      var parsedCtx = parseWhole(ctxRaw);
+      if (parsedCtx === null) {
+        notices.push("Context '" + String(ctxRaw).trim() + "' is not a whole number of tokens; using 8192.");
+      } else if (parsedCtx < 1) {
+        notices.push("Context must be at least 1 token; using 8192.");
+      } else {
+        context = parsedCtx;
+      }
+    }
+    if (context > maxCtx) {
+      notices.push(
+        "Context " + context + " exceeds this config's max_position_embeddings (" + maxCtx + "); clamped to " + maxCtx + "."
+      );
+      context = maxCtx;
     }
 
-    function shareToTelegram() {
-        const sel = document.getElementById("modelSelect");
-        const modelName = sel.options[sel.selectedIndex].text.split("(")[0].trim();
-        const totalGB = document.getElementById("totalVal").innerText;
-        const gpu = document.getElementById("gpuVal").innerText;
-        const text = encodeURIComponent(
-            `⚡ Расчет VRAM для ${modelName}:\n` +
-            `• Контекст: ${currentContext.toLocaleString()} токенов\n` +
-            `• Квантование: ${currentQuant.toUpperCase()} (KV: ${currentKVDtype.toUpperCase()})\n` +
-            `• Требуется памяти: ${totalGB}\n` +
-            `• Рекомендуемая GPU: ${gpu}\n\n` +
-            `Калькулятор VRAM от инженерного канала @zexkora_hub:`
+    // ---- batch -----------------------------------------------------------
+    var batch = 1;
+    var batchRaw = params.get("b");
+    if (!isBlank(batchRaw)) {
+      var parsedBatch = parseWhole(batchRaw);
+      if (parsedBatch === null) {
+        notices.push("Batch '" + String(batchRaw).trim() + "' is not a whole number of sequences; using 1.");
+      } else if (parsedBatch < 1) {
+        notices.push("Batch must be at least 1; using 1.");
+      } else {
+        batch = parsedBatch;
+      }
+    }
+    if (batch > MAX_BATCH) {
+      notices.push("Batch " + batch + " exceeds the supported bound " + MAX_BATCH + "; clamped.");
+      batch = MAX_BATCH;
+    }
+
+    // ---- supported context*batch bound (parity with vramcalc.core) -------
+    if (context * batch > MAX_POSITIONS) {
+      var reducedBatch = Math.max(1, Math.floor(MAX_POSITIONS / context));
+      batch = reducedBatch < batch ? reducedBatch : 1;
+      notices.push(
+        "context x batch exceeds the supported bound (" + MAX_POSITIONS + " positions); showing context " +
+          context + " x batch " + batch + "."
+      );
+    }
+
+    // ---- supported KV-cache bound ---------------------------------------
+    var kvPerToken = kvBytesPerTokenFor(model, kvDtype);
+    if (kvPerToken > 0) {
+      var maxSequences = Math.floor(MAX_KV_BYTES / kvPerToken);
+      if (maxSequences < 1) {
+        context = 1;
+        batch = 1;
+        notices.push("KV geometry exceeds the 1 TiB supported bound even for one token; showing context 1 x batch 1.");
+      } else if (context * batch > maxSequences) {
+        batch = Math.max(1, Math.floor(maxSequences / context));
+        notices.push("Derived KV cache would exceed the 1 TiB supported bound; reduced batch to " + batch + ".");
+      }
+    }
+
+    // ---- manual overhead bound ------------------------------------------
+    // Absent => unknown (null). Present => an explicit user bound, including 0.
+    var overheadRaw = params.get("o");
+    var overhead = null;
+    if (!isBlank(overheadRaw)) {
+      var overheadStr = String(overheadRaw).trim();
+      if (!/^[0-9]{1,4}([.][0-9]{1,3})?$/.test(overheadStr)) {
+        notices.push(
+          "Manual overhead must be a non-negative number of GiB (max " + MAX_OVERHEAD_GIB + "); treated as unknown."
         );
-        const url = encodeURIComponent("https://dangerousanen.github.io/llm-vram-calculator/");
-        window.open(`https://t.me/share/url?url=${url}&text=${text}`, "_blank");
+      } else {
+        var overheadValue = parseFloat(overheadStr);
+        if (overheadValue > MAX_OVERHEAD_GIB) {
+          notices.push("Manual overhead " + overheadValue + " GiB exceeds the supported bound " + MAX_OVERHEAD_GIB + " GiB; clamped.");
+          overhead = MAX_OVERHEAD_GIB;
+        } else {
+          overhead = overheadValue;
+        }
+      }
     }
 
-    calculate();
-</script>
+    return {
+      state: {
+        modelId: model.id,
+        quant: quant,
+        context: context,
+        batch: batch,
+        overhead: overhead,
+        kvDtype: kvDtype
+      },
+      notices: notices
+    };
+  }
 
+  function buildQuery(state) {
+    var params = new URLSearchParams();
+    params.set("m", state.modelId);
+    params.set("q", state.quant);
+    params.set("c", String(state.context));
+    params.set("b", String(state.batch));
+    // null/undefined means "unknown"; an explicit bound (even 0) is preserved.
+    if (state.overhead !== null && state.overhead !== undefined && state.overhead !== "") {
+      params.set("o", String(state.overhead));
+    }
+    if (state.kvDtype && state.kvDtype !== "fp16") params.set("k", state.kvDtype);
+    return params.toString();
+  }
+
+  /** Byte-level ledger. Mirrors vramcalc.core.compute_ledger, including refusals. */
+  function computeLedger(model, state) {
+    if (!model || !model.config || !model.weights) {
+      throw stateError("invalid_model", "model entry is incomplete");
+    }
+    var quant = String((state && state.quant) || "");
+    if (!Object.prototype.hasOwnProperty.call(model.weights, quant) || !model.weights[quant]) {
+      throw stateError("unsupported_quant", "quant '" + quant + "' has no official file size for " + model.id);
+    }
+    var context = state.context;
+    if (typeof context !== "number" || !Number.isInteger(context) || context < 1 || context > MAX_CONTEXT) {
+      throw stateError("invalid_context", "context must be a whole number of tokens in 1.." + MAX_CONTEXT + ", got " + context);
+    }
+    var batch = state.batch;
+    if (typeof batch !== "number" || !Number.isInteger(batch) || batch < 1 || batch > MAX_BATCH) {
+      throw stateError("invalid_batch", "batch must be a whole number in 1.." + MAX_BATCH + ", got " + batch);
+    }
+    if (context * batch > MAX_POSITIONS) {
+      throw stateError(
+        "positions_too_large",
+        "context x batch = " + context * batch + " exceeds the supported bound (" + MAX_POSITIONS + ")"
+      );
+    }
+    var kvDtype = String(state.kvDtype || "fp16");
+    var elemBytes = KV_DTYPES[kvDtype];
+    if (!elemBytes) {
+      throw stateError("unsupported_kv_dtype", "KV dtype '" + kvDtype + "' is not modelled (only fp16/bf16)");
+    }
+
+    var g = geometryOf(model);
+    var weights = (model.weights[quant] || {}).bytes;
+    if (!Number.isFinite(weights) || weights < 1) {
+      throw stateError("unsupported_quant", "quant '" + quant + "' has no usable byte size for " + model.id);
+    }
+    var kvPerToken = 2 * g.layers * g.kvHeads * g.headDim * elemBytes;
+    var kvBytes = kvPerToken * context * batch;
+    if (kvBytes > MAX_KV_BYTES) {
+      throw stateError("kv_too_large", "derived KV cache " + kvBytes + " bytes exceeds the supported bound (" + MAX_KV_BYTES + ")");
+    }
+
+    var overheadUnknown = state.overhead === null || state.overhead === undefined || state.overhead === "";
+    var overheadBytes = 0;
+    if (!overheadUnknown) {
+      var overhead = state.overhead;
+      if (typeof overhead !== "number" || !Number.isFinite(overhead) || overhead < 0 || overhead > MAX_OVERHEAD_GIB) {
+        throw stateError("invalid_overhead", "manual overhead must be a finite number of GiB in 0.." + MAX_OVERHEAD_GIB + ", got " + overhead);
+      }
+      overheadBytes = Math.round(overhead * GIB);
+    }
+
+    return {
+      weightsBytes: weights,
+      kvPerToken: kvPerToken,
+      kvBytes: kvBytes,
+      overheadBytes: overheadBytes,
+      overheadUnknown: overheadUnknown,
+      positions: context * batch,
+      subtotalBytes: weights + kvBytes,
+      totalBytes: weights + kvBytes + overheadBytes,
+      layers: g.layers,
+      kvHeads: g.kvHeads,
+      headDim: g.headDim,
+      elemBytes: elemBytes
+    };
+  }
+
+  function gib(bytes) {
+    return bytes / GIB;
+  }
+
+  function fmtGib(bytes) {
+    var v = gib(bytes);
+    if (v >= 100) return v.toFixed(1) + " GiB";
+    if (v >= 10) return v.toFixed(2) + " GiB";
+    return v.toFixed(3) + " GiB";
+  }
+
+  function fmtBytes(bytes) {
+    return String(bytes).replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f") + " B";
+  }
+
+  function overheadLine(state, ledger) {
+    var unknown =
+      ledger.overheadUnknown === true ||
+      state.overhead === null ||
+      state.overhead === undefined ||
+      state.overhead === "";
+    if (unknown) {
+      // deliberately not "0.000 GiB (manual bound)": unknown is not a measured zero
+      return "overhead: unknown - not estimated by this tool";
+    }
+    var suffix = ledger.overheadBytes === 0 ? ", explicitly set to zero" : "";
+    return (
+      "overhead: " + fmtGib(ledger.overheadBytes) + " (" + ledger.overheadBytes + " B, manual bound" + suffix + ", not estimated)"
+    );
+  }
+
+  function reportText(model, state, ledger) {
+    var src = model.source || {};
+    var lines = [
+      "LLM memory ledger (config-grounded, NOT measured VRAM)",
+      "model:    " + model.display_name + " [" + state.quant + "] (" + model.id + ")",
+      "source:   " + src.repo + " @ " + String(src.revision || "").slice(0, 12),
+      "config:   sha256 " + String(src.config_sha256 || "").slice(0, 16),
+      "geometry: " + ledger.layers + " layers, " + ledger.kvHeads + " KV heads, head_dim " + ledger.headDim,
+      "context:  " + state.context + " tokens x " + state.batch + " sequence(s), KV " + state.kvDtype,
+      "units:    GiB (1 GiB = 1024^3 bytes); exact byte counts in parentheses",
+      "weights:  " + fmtGib(ledger.weightsBytes) + " (" + ledger.weightsBytes + " B)",
+      "KV cache: " + fmtGib(ledger.kvBytes) + " (" + ledger.kvBytes + " B, " + ledger.kvPerToken + " B/token/seq)",
+      "subtotal: " + fmtGib(ledger.subtotalBytes) + " (" + ledger.subtotalBytes + " B, weights + KV)",
+      overheadLine(state, ledger),
+      "TOTAL:    " + fmtGib(ledger.totalBytes) + " (" + ledger.totalBytes + " B) - ledger sum, not measured VRAM, not a fit guarantee",
+      "limits:   runtime overhead unknown; fp16/bf16 KV only; no MoE/MLA/sliding-window/offload modelling"
+    ];
+    return lines.join("\n");
+  }
+
+  return {
+    MAX_CONTEXT: MAX_CONTEXT,
+    MAX_BATCH: MAX_BATCH,
+    MAX_POSITIONS: MAX_POSITIONS,
+    MAX_KV_BYTES: MAX_KV_BYTES,
+    MAX_OVERHEAD_GIB: MAX_OVERHEAD_GIB,
+    KV_DTYPES: KV_DTYPES,
+    parseState: parseState,
+    buildQuery: buildQuery,
+    computeLedger: computeLedger,
+    quantKeys: quantKeys,
+    maxContextOf: maxContextOf,
+    modelById: modelById,
+    fmtGib: fmtGib,
+    fmtBytes: fmtBytes,
+    gib: gib,
+    reportText: reportText
+  };
+});
+
+</script>
+<script>
+window.VRAM_CATALOG = {"schema_version":2,"generated_at":"2026-11-07T10:19:41+00:00","data_source":"huggingface_hub_public_api","models":[{"id":"qwen2.5-7b-instruct","display_name":"Qwen2.5 7B Instruct","short_name":"Qwen2.5-7B-Instruct","license":"apache-2.0","source":{"hub":"huggingface","repo":"Qwen/Qwen2.5-7B-Instruct","revision":"a09a35458c702b33eeacc393d103063234e8bc28","revision_url":"https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/a09a35458c702b33eeacc393d103063234e8bc28","config_sha256":"7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c","config_url":"https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/raw/a09a35458c702b33eeacc393d103063234e8bc28/config.json","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","gguf_revision_url":"https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/tree/bb5d59e06d9551d752d08b292a50eb208b07ab1f"},"config":{"architectures":["Qwen2ForCausalLM"],"attention_dropout":0.0,"bos_token_id":151643,"eos_token_id":151645,"hidden_act":"silu","hidden_size":3584,"initializer_range":0.02,"intermediate_size":18944,"max_position_embeddings":32768,"max_window_layers":28,"model_type":"qwen2","num_attention_heads":28,"num_hidden_layers":28,"num_key_value_heads":4,"rms_norm_eps":1e-06,"rope_theta":1000000.0,"sliding_window":131072,"tie_word_embeddings":false,"torch_dtype":"bfloat16","transformers_version":"4.43.1","use_cache":true,"use_sliding_window":false,"vocab_size":152064},"weights":{"bf16":{"bytes":15231271888,"source":"official_safetensors","detail":"exact byte sum of the official safetensors shards at the pinned revision","files":[{"path":"model-00001-of-00004.safetensors","bytes":3945441440},{"path":"model-00002-of-00004.safetensors","bytes":3864726352},{"path":"model-00003-of-00004.safetensors","bytes":3864726424},{"path":"model-00004-of-00004.safetensors","bytes":3556377672}]},"fp16":{"bytes":15231271888,"source":"official_safetensors_size_equivalent","detail":"the official shards are stored as bfloat16; fp16 has the same 2 bytes/parameter, so the resident weight size is identical","files":[{"path":"model-00001-of-00004.safetensors","bytes":3945441440},{"path":"model-00002-of-00004.safetensors","bytes":3864726352},{"path":"model-00003-of-00004.safetensors","bytes":3864726424},{"path":"model-00004-of-00004.safetensors","bytes":3556377672}]},"q2_k":{"bytes":3015940000,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q2_k.gguf","bytes":3015940000}]},"q3_k_m":{"bytes":3808391072,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q3_k_m.gguf","bytes":3808391072}]},"q4_0":{"bytes":4431390848,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q4_0-00001-of-00002.gguf","bytes":3983228352},{"path":"qwen2.5-7b-instruct-q4_0-00002-of-00002.gguf","bytes":448162496}]},"q4_k_m":{"bytes":4683073632,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf","bytes":3993201344},{"path":"qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf","bytes":689872288}]},"q5_0":{"bytes":5315176576,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q5_0-00001-of-00002.gguf","bytes":4001112160},{"path":"qwen2.5-7b-instruct-q5_0-00002-of-00002.gguf","bytes":1314064416}]},"q5_k_m":{"bytes":5444831360,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf","bytes":3989841792},{"path":"qwen2.5-7b-instruct-q5_k_m-00002-of-00002.gguf","bytes":1454989568}]},"q6_k":{"bytes":6254198880,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q6_k-00001-of-00002.gguf","bytes":3950642464},{"path":"qwen2.5-7b-instruct-q6_k-00002-of-00002.gguf","bytes":2303556416}]},"q8_0":{"bytes":8098525408,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen2.5-7B-Instruct-GGUF","gguf_revision":"bb5d59e06d9551d752d08b292a50eb208b07ab1f","files":[{"path":"qwen2.5-7b-instruct-q8_0-00001-of-00003.gguf","bytes":3980069248},{"path":"qwen2.5-7b-instruct-q8_0-00002-of-00003.gguf","bytes":3942935680},{"path":"qwen2.5-7b-instruct-q8_0-00003-of-00003.gguf","bytes":175520480}]}}},{"id":"qwen3-8b","display_name":"Qwen3 8B","short_name":"Qwen3-8B","license":"apache-2.0","source":{"hub":"huggingface","repo":"Qwen/Qwen3-8B","revision":"b968826d9c46dd6066d109eabc6255188de91218","revision_url":"https://huggingface.co/Qwen/Qwen3-8B/tree/b968826d9c46dd6066d109eabc6255188de91218","config_sha256":"f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30","config_url":"https://huggingface.co/Qwen/Qwen3-8B/raw/b968826d9c46dd6066d109eabc6255188de91218/config.json","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","gguf_revision_url":"https://huggingface.co/Qwen/Qwen3-8B-GGUF/tree/7c41481f57cb95916b40956ab2f0b139b296d974"},"config":{"architectures":["Qwen3ForCausalLM"],"attention_bias":false,"attention_dropout":0.0,"bos_token_id":151643,"eos_token_id":151645,"head_dim":128,"hidden_act":"silu","hidden_size":4096,"initializer_range":0.02,"intermediate_size":12288,"max_position_embeddings":40960,"max_window_layers":36,"model_type":"qwen3","num_attention_heads":32,"num_hidden_layers":36,"num_key_value_heads":8,"rms_norm_eps":1e-06,"rope_scaling":null,"rope_theta":1000000,"sliding_window":null,"tie_word_embeddings":false,"torch_dtype":"bfloat16","transformers_version":"4.51.0","use_cache":true,"use_sliding_window":false,"vocab_size":151936},"weights":{"bf16":{"bytes":16381516776,"source":"official_safetensors","detail":"exact byte sum of the official safetensors shards at the pinned revision","files":[{"path":"model-00001-of-00005.safetensors","bytes":3996250744},{"path":"model-00002-of-00005.safetensors","bytes":3993160032},{"path":"model-00003-of-00005.safetensors","bytes":3959604768},{"path":"model-00004-of-00005.safetensors","bytes":3187841392},{"path":"model-00005-of-00005.safetensors","bytes":1244659840}]},"fp16":{"bytes":16381516776,"source":"official_safetensors_size_equivalent","detail":"the official shards are stored as bfloat16; fp16 has the same 2 bytes/parameter, so the resident weight size is identical","files":[{"path":"model-00001-of-00005.safetensors","bytes":3996250744},{"path":"model-00002-of-00005.safetensors","bytes":3993160032},{"path":"model-00003-of-00005.safetensors","bytes":3959604768},{"path":"model-00004-of-00005.safetensors","bytes":3187841392},{"path":"model-00005-of-00005.safetensors","bytes":1244659840}]},"q4_k_m":{"bytes":5027783488,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","files":[{"path":"Qwen3-8B-Q4_K_M.gguf","bytes":5027783488}]},"q5_0":{"bytes":5720761152,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","files":[{"path":"Qwen3-8B-Q5_0.gguf","bytes":5720761152}]},"q5_k_m":{"bytes":5851112224,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","files":[{"path":"Qwen3-8B-Q5_K_M.gguf","bytes":5851112224}]},"q6_k":{"bytes":6725899040,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","files":[{"path":"Qwen3-8B-Q6_K.gguf","bytes":6725899040}]},"q8_0":{"bytes":8709518112,"source":"official_gguf","detail":"exact byte sum of the official GGUF shard files at the pinned revision","gguf_repo":"Qwen/Qwen3-8B-GGUF","gguf_revision":"7c41481f57cb95916b40956ab2f0b139b296d974","files":[{"path":"Qwen3-8B-Q8_0.gguf","bytes":8709518112}]}}}]};
+</script>
+<script>
+/*!
+ * Page controller: wires the pinned catalogue to the form, the ledger table and
+ * the share/copy controls. All validation lives in state.js.
+ */
+(function () {
+  "use strict";
+
+  var S = window.VRAMState;
+  var CATALOG = window.VRAM_CATALOG;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var el = {
+    model: $("model"),
+    quant: $("quant"),
+    ctx: $("ctx"),
+    ctxRange: $("ctxRange"),
+    ctxMax: $("ctx-max"),
+    batch: $("batch"),
+    kvDtype: $("kvdtype"),
+    overhead: $("overhead"),
+    notices: $("notices"),
+    weights: $("out-weights"),
+    weightsBytes: $("out-weights-bytes"),
+    weightsSrc: $("out-weights-src"),
+    kv: $("out-kv"),
+    kvBytes: $("out-kv-bytes"),
+    kvPerToken: $("out-kv-pertoken"),
+    subtotal: $("out-subtotal"),
+    subtotalBytes: $("out-subtotal-bytes"),
+    overheadOut: $("out-overhead"),
+    overheadBytes: $("out-overhead-bytes"),
+    total: $("out-total"),
+    totalBytes: $("out-total-bytes"),
+    formula: $("formula"),
+    prov: $("prov"),
+    limits: $("limits"),
+    status: $("status"),
+    shareTg: $("share-tg"),
+    copyReport: $("copy-report"),
+    copyLink: $("copy-link"),
+    copyFallback: $("copy-fallback"),
+    copyFallbackText: $("copy-fallback-text"),
+    live: $("results-live")
+  };
+
+  var state = null;
+
+  function currentModel() {
+    return S.modelById(CATALOG, state.modelId) || CATALOG.models[0];
+  }
+
+  function readControls() {
+    return {
+      modelId: el.model.value,
+      quant: el.quant.value,
+      // Raw strings on purpose: parseWhole() in state.js is the strict parser.
+      // parseInt here would silently turn "1.5" into 1 and "" into NaN before
+      // the user ever saw a notice.
+      context: el.ctx.value,
+      batch: el.batch.value,
+      overhead: el.overhead.value === "" ? null : parseFloat(el.overhead.value),
+      kvDtype: el.kvDtype.value
+    };
+  }
+
+  function fillModels() {
+    el.model.innerHTML = "";
+    CATALOG.models.forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.display_name + " (" + m.config.num_hidden_layers + " layers)";
+      el.model.appendChild(opt);
+    });
+  }
+
+  function fillQuants(model) {
+    var quants = S.quantKeys(model);
+    el.quant.innerHTML = "";
+    quants.forEach(function (q) {
+      var opt = document.createElement("option");
+      opt.value = q;
+      opt.textContent = q + " \u00b7 " + S.fmtGib(model.weights[q].bytes);
+      el.quant.appendChild(opt);
+    });
+  }
+
+  function showNotices(notices) {
+    if (!notices || !notices.length) {
+      el.notices.hidden = true;
+      el.notices.textContent = "";
+      return;
+    }
+    el.notices.hidden = false;
+    el.notices.innerHTML = "";
+    notices.forEach(function (n) {
+      var div = document.createElement("div");
+      div.textContent = n;
+      el.notices.appendChild(div);
+    });
+  }
+
+  /** Honest, human-readable basis for the weights byte total. */
+  function weightsBasis(w) {
+    if (w.source === "official_gguf") {
+      return "exact byte sum of the official GGUF shard files at the pinned revision.";
+    }
+    if (w.source === "official_safetensors_size_equivalent") {
+      return (
+        "fp16 size equivalent - the official shards are stored as bfloat16 at 2 bytes per element, " +
+        "so this total is the official BF16 byte size, not a separate FP16 file (there is no separate FP16 file at this revision)."
+      );
+    }
+    return "exact byte sum of the official bf16 safetensors shards at the pinned revision (2 bytes per element).";
+  }
+
+  function render() {
+    var model = currentModel();
+    var ledger = S.computeLedger(model, state);
+    var w = model.weights[state.quant];
+    var sizeEquivalent = w.source === "official_safetensors_size_equivalent";
+    var basis = weightsBasis(w);
+
+    el.weights.textContent = S.fmtGib(ledger.weightsBytes);
+    el.weightsBytes.textContent = S.fmtBytes(ledger.weightsBytes);
+    el.weightsSrc.textContent = sizeEquivalent ? "size equivalent" : "exact official file";
+    el.weightsSrc.className = sizeEquivalent ? "badge est" : "badge exact";
+    el.weightsSrc.title =
+      (sizeEquivalent ? "size equivalent, not an exact separate file: " : "") +
+      basis +
+      " @ revision " + String(w.gguf_revision || model.source.revision).slice(0, 8) +
+      " - " + (w.detail || "");
+
+    el.kv.textContent = S.fmtGib(ledger.kvBytes);
+    el.kvBytes.textContent = S.fmtBytes(ledger.kvBytes);
+    el.kvPerToken.textContent = ledger.kvPerToken + " B/token/seq";
+    el.subtotal.textContent = S.fmtGib(ledger.subtotalBytes);
+    el.subtotalBytes.textContent = S.fmtBytes(ledger.subtotalBytes);
+    // never print "0.000 GiB" for something that is unknown rather than zero
+    if (ledger.overheadUnknown) {
+      el.overheadOut.textContent = "\u2014";
+      el.overheadBytes.textContent = "unknown \u00b7 not estimated";
+    } else {
+      el.overheadOut.textContent = S.fmtGib(ledger.overheadBytes);
+      el.overheadBytes.textContent =
+        ledger.overheadBytes === 0 ? "manual bound, explicitly zero \u00b7 not estimated" : "manual bound \u00b7 not estimated";
+    }
+    el.total.textContent = S.fmtGib(ledger.totalBytes);
+    el.totalBytes.textContent = S.fmtBytes(ledger.totalBytes);
+    el.formula.textContent =
+      "KV bytes = 2 (key+value) \u00d7 " + ledger.layers + " layers \u00d7 " + ledger.kvHeads +
+      " KV heads \u00d7 head_dim " + ledger.headDim + " \u00d7 " + ledger.elemBytes +
+      " bytes/element \u00d7 " + state.context + " tokens \u00d7 " + state.batch + " sequence(s) = " +
+      S.fmtBytes(ledger.kvBytes);
+
+    el.prov.innerHTML = "";
+    var rows = [
+      ["model repo", model.source.repo + " @ " + String(model.source.revision).slice(0, 12)],
+      ["config sha256", String(model.source.config_sha256).slice(0, 32) + "\u2026"],
+      ["license", model.license],
+      ["max context", String(S.maxContextOf(model)) + " tokens (config.max_position_embeddings)"],
+      ["weights file", (w.files && w.files[0] ? w.files[0].path : "") + (w.files && w.files.length > 1 ? " + " + (w.files.length - 1) + " more" : "")]
+    ];
+    rows.forEach(function (r) {
+      var line = document.createElement("div");
+      line.innerHTML = "<span>" + r[0] + ": </span><code></code>";
+      line.querySelector("code").textContent = r[1];
+      el.prov.appendChild(line);
+    });
+    // visible (not hover-only) explanation of how the weights byte total was derived
+    var basisNote = document.createElement("p");
+    basisNote.className = "prov-note";
+    basisNote.id = "prov-weights-basis";
+    basisNote.textContent = "Weights byte basis: " + basis;
+    el.prov.appendChild(basisNote);
+    var link = document.createElement("a");
+    link.href = model.source.revision_url;
+    link.rel = "noopener noreferrer nofollow";
+    link.target = "_blank";
+    link.textContent = "Open the pinned revision on Hugging Face \u2197";
+    el.prov.appendChild(link);
+
+    var limits = [
+      "Runtime overhead (CUDA context, allocator fragmentation, activations, workspaces) is not estimated \u2014 add a manual bound only if you measured one.",
+      "The total is an arithmetic sum of bytes: it is not measured VRAM and not a guarantee that the model fits.",
+      "Only uniform full attention is modelled: MoE, MLA, sliding windows and hybrid layers are refused, not approximated.",
+      "Only fp16/bf16 KV cache is modelled; quantized KV cache has no exact-size claim here.",
+      "Tensor parallelism, CUDA graphs, paged-attention block padding and prefix caching are not modelled.",
+      "Partial CPU offload is not modelled: the GPU resident set then depends on the runtime.",
+      "Context is capped at this config's max_position_embeddings; rope/YaRN extrapolation is not modelled."
+    ];
+    el.limits.innerHTML = "";
+    limits.forEach(function (t) {
+      var li = document.createElement("li");
+      li.textContent = t;
+      el.limits.appendChild(li);
+    });
+
+    updateUrl();
+    updateShare(model, ledger);
+    el.live.textContent = "Ledger updated: " + S.fmtGib(ledger.totalBytes) + " total for " + model.display_name + ".";
+  }
+
+  function updateUrl() {
+    var qs = S.buildQuery(state);
+    try {
+      history.replaceState(null, "", location.pathname + "?" + qs + location.hash);
+    } catch (err) {
+      /* file:// or sandboxed iframes may refuse; the app still works */
+    }
+  }
+
+  function updateShare(model, ledger) {
+    var url = location.href;
+    var text = S.reportText(model, state, ledger);
+    var tg = "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+    el.shareTg.href = tg;
+    el.shareTg.dataset.report = text;
+  }
+
+  function syncFromState() {
+    el.model.value = state.modelId;
+    fillQuants(currentModel());
+    el.quant.value = state.quant;
+    el.ctx.value = String(state.context);
+    el.ctxRange.max = String(S.maxContextOf(currentModel()));
+    el.ctxRange.value = String(Math.min(state.context, parseInt(el.ctxRange.max, 10)));
+    el.batch.value = String(state.batch);
+    el.kvDtype.value = state.kvDtype;
+    el.overhead.value = state.overhead === null || state.overhead === undefined ? "" : String(state.overhead);
+    el.ctxMax.textContent = "max " + S.maxContextOf(currentModel());
+    el.ctxRange.max = String(S.maxContextOf(currentModel()));
+  }
+
+  function onChange() {
+    var form = readControls();
+    var parsed = S.parseState(new URLSearchParams({
+      m: form.modelId,
+      q: form.quant,
+      c: form.context,
+      b: form.batch,
+      o: el.overhead.value,
+      k: form.kvDtype
+    }).toString(), CATALOG);
+    state = parsed.state;
+    // A blank *entered field* is not the same as an absent URL parameter: the
+    // parser documents "absent or blank -> default, no notice", so the field
+    // level has to say out loud that it fell back instead of staying silent.
+    var notices = parsed.notices.slice();
+    if (String(form.context).trim() === "") {
+      notices.push("Context field was left blank; using the default " + parsed.state.context + " tokens.");
+    }
+    if (String(form.batch).trim() === "") {
+      notices.push("Batch field was left blank; using the default " + parsed.state.batch + " sequence(s).");
+    }
+    syncFromState();
+    showNotices(notices);
+    render();
+  }
+
+  var statusTimer = null;
+
+  function setStatus(message, keepMs) {
+    el.status.textContent = message;
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () {
+      el.status.textContent = "";
+      statusTimer = null;
+    }, keepMs || 2500);
+  }
+
+  function hideManualCopy() {
+    if (!el.copyFallback) return;
+    el.copyFallback.hidden = true;
+    el.copyFallbackText.value = "";
+  }
+
+  /** Honest fallback: show the real text in a selectable box instead of faking success. */
+  function showManualCopy(text) {
+    if (!el.copyFallback) return;
+    el.copyFallback.hidden = false;
+    el.copyFallbackText.value = text;
+    try {
+      el.copyFallbackText.focus();
+      el.copyFallbackText.select();
+    } catch (err) {
+      /* selection is best effort */
+    }
+  }
+
+  function copyText(text, okMessage) {
+    var settled = false;
+    function done() {
+      if (settled) return;
+      settled = true;
+      hideManualCopy();
+      setStatus(okMessage);
+    }
+    function failed() {
+      if (settled) return;
+      settled = true;
+      setStatus("Copy failed: the browser refused clipboard access. The text is selected below - copy it manually.", 8000);
+      showManualCopy(text);
+    }
+    function execCommandFallback() {
+      if (settled) return;
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      document.body.appendChild(ta);
+      ta.select();
+      var copied = false;
+      try {
+        copied = document.execCommand("copy") === true;
+      } catch (err) {
+        copied = false;
+      }
+      document.body.removeChild(ta);
+      if (copied) done();
+      else failed();
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(text).then(done, execCommandFallback);
+    } else {
+      execCommandFallback();
+    }
+  }
+
+  function init() {
+    if (!CATALOG || !CATALOG.models || !CATALOG.models.length) {
+      el.notices.hidden = false;
+      el.notices.textContent = "Model catalogue failed to load. Reload the page.";
+      return;
+    }
+    fillModels();
+    var parsed = S.parseState(location.search, CATALOG);
+    state = parsed.state;
+    syncFromState();
+    el.model.addEventListener("change", function () { state = { modelId: el.model.value, quant: null }; onChange(); });
+    el.quant.addEventListener("change", onChange);
+    el.batch.addEventListener("change", onChange);
+    el.kvDtype.addEventListener("change", onChange);
+    el.overhead.addEventListener("change", onChange);
+    el.ctx.addEventListener("change", onChange);
+    el.ctxRange.addEventListener("input", function () {
+      el.ctx.value = el.ctxRange.value;
+      onChange();
+    });
+    el.copyReport.addEventListener("click", function () {
+      var model = currentModel();
+      copyText(S.reportText(model, state, S.computeLedger(model, state)), "Report copied to clipboard.");
+    });
+    el.copyLink.addEventListener("click", function () {
+      copyText(location.href, "Share link copied to clipboard.");
+    });
+    showNotices(parsed.notices);
+    render();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+
+</script>
 </body>
 </html>
