@@ -1,137 +1,175 @@
-# ⚡ LLM VRAM Calculator & Inference Speedtest
+# ⚡ LLM VRAM Calculator — config-grounded ledger
 
 [![Telegram](https://img.shields.io/badge/Telegram-@zexkora__hub-0088cc?logo=telegram&style=for-the-badge)](https://t.me/zexkora_hub)
-[![Live WebApp](https://img.shields.io/badge/Live_WebApp-Interactive_Calc-00d2ff?style=for-the-badge)](https://dangerousanen.github.io/llm-vram-calculator/)
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
+[![Live WebApp](https://img.shields.io/badge/Live_WebApp-GitHub_Pages-00d2ff?style=for-the-badge)](https://dangerousanen.github.io/llm-vram-calculator/)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vram_calc.py)
+[![Zero Dependencies](https://img.shields.io/badge/Runtime%20Deps-Zero%20(Stdlib)-brightgreen?style=for-the-badge)](vramcalc)
 
-> **🚀 Интерактивный WebApp калькулятор:** [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/) (работает в браузере, без установки)  
-> 📖 **Подробный лонгрид с математикой и формулами:** [Локальные LLM в 2026: рантаймы, расчет VRAM и ловушка KV-кэша (Telegraph)](https://telegra.ph/Lokalnye-LLM-v-2026-rantajmy-raschet-VRAM-i-lovushka-KV-kehsha-10-28)  
-> 📢 **Официальный инженерный канал:** [**@zexkora_hub**](https://t.me/zexkora_hub) — Архитектурные шпаргалки, физика инференса, бенчмарки и разборы сорцов.
-
-Легковесная автономная CLI-утилита без внешних зависимостей (pure Python stdlib) для:
-1. **Точного расчета видеопамяти (VRAM)** под любую открытую модель (7B–671B): веса модели ($M_{weights}$), аппетит динамического KV-кэша ($M_{kv}$), контекстные окна (4k–128k токенов), активации и оверхед CUDA.
-2. **Спидтеста локального и облачного инференса** (vLLM, llama.cpp, Ollama, SGLang, OpenAI API) с замером **TTFT** (Time to First Token) и **TPS** (Tokens/sec).
+> 🚀 Интерактивный калькулятор (GitHub Pages): [dangerousanen.github.io/llm-vram-calculator](https://dangerousanen.github.io/llm-vram-calculator/) — работает в браузере, без установки, без аналитики и без сбора идентификаторов.
+> 📖 Подробный лонгрид с математикой: [Локальные LLM в 2026: рантаймы, расчёт VRAM и ловушка KV-кэша](https://telegra.ph/Lokalnye-LLM-v-2026-rantajmy-raschet-VRAM-i-lovushka-KV-kehsha-10-28)
+> 📢 Инженерный канал: [**@zexkora_hub**](https://t.me/zexkora_hub) — шпаргалки по физике инференса, бенчмарки, разборы сорцов.
 
 ---
 
-![VRAM Cheatsheet & Memory Matrix](kv_cache_infographic.png)
+## Что это на самом деле считает
 
----
+Калькулятор строит **бухгалтерию байт** для dense-модели: сколько занимают веса из официального файла и сколько занимает KV-кэш по геометрии самого конфига. Единица — **GiB (1 GiB = 1024³ байт)**, рядом всегда печатается точное число байт.
 
-## 🛑 Почему происходят CUDA Out of Memory (OOM)?
+```
+ledger_total   = weights_bytes + kv_cache_bytes + manual_overhead_bytes
+kv_cache_bytes = 2 (key+value) × num_hidden_layers × num_key_value_heads
+                 × head_dim × bytes_per_element × context × batch
+```
 
-90% сбоев при запуске локальных LLM происходят потому, что инженеры учитывают только «сухой вес» модели из репозитория Hugging Face. 
+Каждое слагаемое имеет источник:
 
-Реальная видеопамять складывается из трёх слагаемых:
-$$\text{Total VRAM} = M_{\text{weights}} + M_{\text{kv-cache}} + \text{CUDA Overhead} + \text{Peak Activations}$$
+| Слагаемое | Откуда берётся |
+|---|---|
+| Веса | точная сумма байт официальных файлов (safetensors-шарды или GGUF) на **закреплённой ревизии** Hugging Face |
+| KV-кэш | `num_hidden_layers`, `num_key_value_heads`, `head_dim`, `max_position_embeddings` из `config.json` этой же ревизии |
+| Runtime overhead | **не оценивается.** Неизвестен. Можно добавить свой измеренный запас флагом `--overhead-gib` — он будет помечен как ручная граница |
 
-* **Веса ($M_{weights}$):**
-  * `FP16 / BF16`: ~2.0 ГБ на каждый 1B параметров
-  * `FP8`: ~1.0 ГБ на каждый 1B параметров
-  * `Q4_K_M (GGUF)`: ~0.58 ГБ на каждый 1B параметров
-  * `NVFP4`: ~0.52 ГБ на каждый 1B параметров
-* **KV-Кэш ($M_{kv}$):** 
-  $$M_{\text{kv}} = 2 \times \text{layers} \times \text{kv\_heads} \times \text{head\_dim} \times \text{bytes\_per\_elem} \times \text{seq\_len} \times \text{batch\_size}$$
-  *На контексте 32,768 токенов в FP16 один лишь KV-кэш для 7B модели съедает **4.2 ГБ VRAM**!*
-* **Оверхед CUDA:** ~650–850 МБ под контекст драйвера PyTorch / CUDA + буферы активаций.
+Итог **не является измеренной VRAM** и **не гарантия**, что модель влезет: CUDA-контекст, фрагментация аллокатора, активации, workspace-буферы, CUDA graphs и padding paged-attention зависят от рантайма. Это написано и в CLI, и в веб-интерфейсе.
 
----
+## Поддерживаемые модели (ревизии закреплены)
 
-## 🚀 Быстрый старт (Zero Setup)
+| id | Репозиторий | Ревизия конфига | Ревизия GGUF | Лицензия |
+|---|---|---|---|---|
+| `qwen2.5-7b-instruct` | `Qwen/Qwen2.5-7B-Instruct` | `a09a35458c702b33eeacc393d103063234e8bc28` | `bb5d59e06d9551d752d08b292a50eb208b07ab1f` | apache-2.0 |
+| `qwen3-8b` | `Qwen/Qwen3-8B` | `b968826d9c46dd6066d109eabc6255188de91218` | `7c41481f57cb95916b40956ab2f0b139b296d974` | apache-2.0 |
 
-Скрипт использует **только стандартную библиотеку Python**. Никаких `pip install` не требуется.
+Размеры файлов и `sha256` конфигов лежат в `vramcalc/data/models.json` и пересобираются скриптом `scripts/fetch_model_metadata.py` — он скачивает **только** `config.json` и публичный листинг файлов, никаких весов. Проверка, что цифры не разъехались с upstream:
 
 ```bash
-# Клонируйте репозиторий
+python scripts/fetch_model_metadata.py --check
+```
+
+## Быстрый старт
+
+```bash
 git clone https://github.com/DangerousANEN/llm-vram-calculator.git
 cd llm-vram-calculator
+python -m vram_calc models
 
-# 1. Рассчитать VRAM для 7B модели (квантование Q4_K_M, контекст 8192 токена)
-python vram_calc.py calc --params 7 --quant q4_k_m --ctx 8192
+# Qwen2.5 7B, Q4_K_M, контекст 8192, одна последовательность
+python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 
-# 2. Рассчитать VRAM для 32B модели под продакшен (batch size = 4, FP8 KV-кэш)
-python vram_calc.py calc --params 32 --quant fp8 --ctx 16384 --batch 4 --kv-quant fp8
+# Qwen3 8B, bf16, 32k, batch 4, плюс свой измеренный запас 2 GiB
+python -m vram_calc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --overhead-gib 2
 
-# 3. Рассчитать DeepSeek V3 / R1 (671B с архитектурой сжатия MLA)
-python vram_calc.py calc --params 671 --quant nvfp4 --ctx 32768 --mla
+# машинный вывод
+python -m vram_calc calc --model qwen3-8b --quant q4_k_m --ctx 8192 --json
 ```
 
-### Пример вывода:
-```text
-==================================================
- 🧮 VRAM ALLOCATION REPORT: 7.0B (Q4_K_M)
-==================================================
- • Веса модели (Weights):         3.78 GB
- • KV-Кэш (8192 токенов, b=1):     1.06 GB (kv=fp16)
- • CUDA Overhead + Активации:    0.81 GB
---------------------------------------------------
- • ИТОГО Потребление:            5.65 GB
- • Рекомендуемый размер GPU:         7 GB VRAM
-==================================================
-```
-
----
-
-## ⚡ Спидтест инференса (TTFT & Tokens/sec)
-
-Утилита умеет напрямую замерять реальную скорость отдачи токенов на любом OpenAI-совместимом эндпоинте (vLLM, llama-server, Ollama, LM Studio, TGI):
+Установка как пакета (entry points `vram-calc` и `llm-vram-calc`):
 
 ```bash
-# Замер локального сервера vLLM
-python vram_calc.py bench --url http://localhost:8000/v1 --model meta-llama/Llama-3.3-70B-Instruct
-
-# Замер Ollama
-python vram_calc.py bench --url http://localhost:11434/v1 --model qwen2.5:7b
+pip install -e .     # или pip install dist/*.whl
+vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 ```
 
-Вывод замера:
-```text
-==================================================
- ⚡ INFERENCE SPEEDTEST REPORT: qwen2.5:7b
-==================================================
- • TTFT (Time to First Token):    142.3 ms
- • Скорость генерации (TPS):      64.20 tok/s
- • Всего токенов:                   120 tokens
- • Общее время:                    1.87 s
-==================================================
+`python vram_calc.py ...` продолжает работать, но печатает в stderr уведомление о миграции на `python -m vram_calc`.
+
+## Что калькулятор **отказывается** считать
+
+Отказ — это фича. Вместо похожего числа выводится ошибка с кодом и причиной.
+
+- **MoE** (`num_experts`, `num_local_experts`, `n_routed_experts`, …) — активные параметры не равны резидентным весам, dense-формула соврёт.
+- **MLA** (DeepSeek-подобное латентное внимание, `kv_lora_rank` и т.п.) — своя геометрия сжатия, здесь не моделируется.
+- **Sliding window** (`use_sliding_window: true`) — кэш перестаёт расти за окном, формула завысила бы память.
+- **Гибридное внимание по слоям** (`layer_types` с `linear_attention` и т.п.) — рост кэша не одинаковый.
+- **Неизвестная архитектура** — `model_type` вне `{qwen2, qwen3}`.
+- **Квантованный KV-кэш** (`--kv-quant fp8`, любые q8/q4) — точного размера без знания блоков и рантайма нет; считается только `fp16`/`bf16`.
+- **Частичный CPU-offload** (`--cpu-offload-gib`) — резидентный набор GPU тогда зависит от рантайма.
+- **Context > `max_position_embeddings`** — YaRN/rope-экстраполяция не моделируется. У Qwen2.5-7B в конфиге 32768 (карточка модели упоминает расширение), калькулятор держится конфига.
+- **Абсурдные входы** — нецелые/нечисловые/≤0 значения, `context × batch > 33 554 432`, KV > 1 TiB.
+
+## Честные единицы и overhead
+
+- Всё в GiB, байты печатаются точно (`4683073632 B`).
+- Веса: `bf16`/`fp16` — точная сумма официальных safetensors-шардов; `q4_k_m`, `q5_k_m`, `q6_k`, `q8_0` и др. — точная сумма официальных GGUF-файлов. Если официального файла нужного кванта нет, CLI откажется и предложит `--allow-estimate`, который выдаёт **помеченную** оценку по байт-на-параметр.
+- KV: только `fp16`/`bf16`, оба по 2 байта на элемент.
+- Runtime overhead: `unknown_not_estimated`. Ручной запас добавляется как `manual_bound`.
+
+## CLI
+
+```bash
+python -m vram_calc models                  # модели, ревизии, точные кванты
+python -m vram_calc calc --help
+python -m vram_calc calc --model ... --quant ... --ctx ... [--batch N] [--kv-dtype fp16|bf16] [--overhead-gib X] [--json]
+python -m vram_calc bench --url http://127.0.0.1:8000/v1 --model local-model
 ```
 
----
+### Миграция со старого `--params`
 
-## 📊 Матрица моделей и минимальные требования GPU
+Старый режим выводил число слоёв и KV-голов из количества параметров — это не конфиг. Он удалён как «точный»:
 
-| Модель | Параметры | Q4_K_M (GGUF) | FP8 (vLLM) | BF16 (Чистая) | Мин. рекомендуемый GPU |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Qwen 2.5 / 3** | 7B | 4.8 GB | 7.8 GB | 14.8 GB | RTX 4060 (8 GB) |
-| **Llama 3.1 / 3.3** | 8B | 5.2 GB | 8.6 GB | 16.4 GB | RTX 4060 (8 GB) |
-| **Qwen 2.5** | 14B | 9.1 GB | 14.9 GB | 29.2 GB | RTX 4070 (12/16 GB) |
-| **Qwen 2.5 / DeepSeek** | 32B | 19.8 GB | 33.5 GB | 65.0 GB | RTX 3090 / 4090 (24 GB) |
-| **Llama 3.3** | 70B | 42.5 GB | 72.0 GB | 142.0 GB | 2× RTX 3090 (48 GB) |
-| **DeepSeek V3 / R1** | 671B (MLA) | 140 GB | 280 GB | 640 GB | 4-8× H100 / Mac Studio |
+```bash
+$ python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192
+error [legacy_params_removed]: ... Use --model qwen2.5-7b-instruct ...
+```
 
-*(Расчет дан с учетом KV-кэша на 8,192 токена)*
+Если нужна именно грубая оценка для миграции скриптов — только явным флагом и с пометкой «NOT CONFIG-GROUNDED»:
 
----
+```bash
+python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic
+```
 
-## 💡 4 Production-Хака для предотвращения OOM
+### Бенчмарк: чанки — это не токены
 
-1. **Квантование KV-кэша в FP8 (`--kv-cache-dtype fp8` в vLLM):** срезает размер кэша ровно в 2 раза без деградации рассуждений и удваивает допустимый batch size.
-2. **Лимит утилизации памяти (`--gpu-memory-utilization 0.88`):** никогда не выставляйте 0.98 на проде: первый же всплеск активаций при длинном запросе уронит воркер в OOM.
-3. **Multi-Head Latent Attention (MLA):** модели семейства DeepSeek V3/R1 сжимают KV-кэш в 5–7 раз за счет низкоранговой проекции латентного вектора $c_t$.
-4. **Сброс слоев в RAM в llama.cpp (`-ngl` / `-ot`):** если для модели не хватает 1–2 ГБ VRAM, сбросьте 4–6 слоев в оперативную память. Скорость упадет всего на 10–15%, но сервис не упадет.
+Прошлая версия считала SSE-чанки и печатала их как tokens/s. Чанк может содержать один токен, половину или десять, поэтому теперь:
 
----
+- запрос идёт с `stream_options.include_usage: true`;
+- `tokens/s` печатается **только** если сервер вернул `usage.completion_tokens` (поле `tps` в JSON, `tps_basis` объясняет базу);
+- если usage нет — `tps: null` и причина `provider_did_not_report_usage`, а сырой поток выводится как `chunk_rate_per_s` с подписью «stream chunks/s — NOT tokens/s»;
+- TPS никогда не досчитывается из чанков.
 
-## 📢 Сообщество и исследования
+## Веб-интерфейс
 
-Больше практических инженерных гайдов, разборов архитектур нейросетей, бенчмарков железа и свежих открытых инструментов — в Telegram-канале:
+- Выбор модели, точного кванта, контекста (ползунок + число), batch, типа KV, ручного overhead.
+- Показывает источник и ревизию, sha256 конфига, лицензию, формулу KV с подставленными числами.
+- Кнопки «Скопировать отчёт» и «Скопировать ссылку», официальный `t.me/share/url` chooser (Telegram-шеринг опционален, ничего не отправляется автоматически).
+- Состояние в URL (`?m=&q=&c=&b=&o=&k=`) валидируется при загрузке: неизвестная модель/квант/тип KV и запредельный контекст не ломают страницу, а показывают уведомление и подставляют допустимое значение.
+- Страница самодостаточна: каталог, стили и JS встроены в `index.html`, никаких внешних скриптов и `fetch` — работает и с GitHub Pages, и из `file://`.
+- Мобильный от 360 px и десктоп, без горизонтальной прокрутки, управление доступно с клавиатуры.
 
-👉 **[Подписаться на Zexkora Hub (@zexkora_hub)](https://t.me/zexkora_hub)**
+Пересобрать страницу после изменения каталога:
 
----
+```bash
+python scripts/build_web.py          # перегенерировать index.html
+python scripts/build_web.py --check  # проверить, что коммит актуален (делает CI)
+```
+
+## Тесты
+
+```bash
+python -m pytest -m "not ui"              # формулы, отказы, каталог, CLI, bench, статика
+node tests/node/state.test.cjs            # валидация URL-state + сверка чисел JS ↔ Python
+python -m pytest -m ui tests/test_ui.py   # headless chromium + firefox, скриншоты в validation/screenshots
+```
+
+Покрыто: точные байты весов против официальных листингов, `kv_bytes_per_token` (57344 B для Qwen2.5-7B, 147456 B для Qwen3-8B), отказы по MoE/MLA/sliding window/гибриду/неизвестной архитектуре, границы контекста и batch, помеченные оценки, CLI exit-коды и миграция, честность bench (usage / без usage / HTTP 500), совпадение чисел Python и JS, валидация URL и копирование/шеринг в реальном браузере.
+
+Сборка пакета и smoke из чистого окружения:
+
+```bash
+python -m build
+python -m venv /tmp/venv && /tmp/venv/bin/pip install dist/*.whl
+/tmp/venv/bin/vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192 --json
+```
+
+CI (`.github/workflows/ci.yml`) гоняет юнит-тесты на Python 3.9/3.11/3.13, node-тесты, проверку актуальности `index.html`, сборку wheel + smoke из чистого venv и UI-тесты в chromium и firefox.
+
+## Чего в этом релизе нет
+
+- Никакой проверки на реальной GPU: GPU-прогон этим релизом не выполнялся, поле `verification.gpu_runtime_checked` всегда `false`.
+- Нет MoE/MLA/sliding-window/гибридных архитектур и квантованного KV.
+- Нет tensor-parallel репликации, CUDA graphs, prefix caching, padding paged-attention.
+- Нет телеметрии, аккаунтов и обязательной подписки: калькулятор полностью работает без Telegram.
+
+Если цифры расходятся с вашим рантаймом — это ожидаемо: ledger описывает байты тензоров, а не поведение аллокатора. Присылайте измеренные значения — добавим как явную границу.
 
 ## Лицензия
 
-Распространяется под лицензией MIT. Подробности в файле [LICENSE](LICENSE).
+MIT — см. [LICENSE](LICENSE). Метаданные моделей принадлежат их авторам (Qwen, apache-2.0).

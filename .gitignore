@@ -1,0 +1,21 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# test / tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# generated probe files
+tests/node/ledger_probe.cjs
+
+# editor / OS noise
+.DS_Store
+.idea/
+.vscode/

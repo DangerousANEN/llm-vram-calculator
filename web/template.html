@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+<title>Zexkora Hub — калькулятор VRAM и KV-кэша (config-grounded)</title>
+<meta name="description" content="Честный расчёт памяти под dense-модели: веса из официальных файлов, KV-кэш по геометрии конфига, явные пределы. Qwen2.5-7B-Instruct и Qwen3-8B с закреплёнными ревизиями.">
+<meta property="og:title" content="Zexkora Hub — калькулятор VRAM и KV-кэша">
+<meta property="og:description" content="Config-grounded ledger: веса + KV-кэш + честно неизвестный runtime overhead. Без выдуманных «точных» цифр.">
+<meta property="og:type" content="website">
+<style>
+/*__STYLES__*/
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="bolt" aria-hidden="true">⚡</span>
+      <strong>Zexkora Hub</strong>
+      <span class="tag">config-grounded ledger</span>
+    </div>
+    <nav class="links" aria-label="Official links">
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator" rel="noopener noreferrer">GitHub repo</a>
+      <a href="https://dangerousanen.github.io/llm-vram-calculator/" rel="noopener noreferrer">GitHub Pages</a>
+      <a href="https://t.me/zexkora_hub" rel="noopener noreferrer">Telegram @zexkora_hub</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Сколько памяти реально нужно модели</h1>
+    <p class="sub">
+      Веса берутся из <b>официальных файлов</b> на закреплённой ревизии Hugging Face, KV-кэш считается по
+      геометрии самого конфига (layers × KV heads × head_dim), а runtime overhead <b>не выдумывается</b>.
+      Итог — бухгалтерская сумма байт, а не измеренная VRAM и не гарантия запуска.
+    </p>
+
+    <div class="grid">
+
+      <section class="card" aria-labelledby="controls-h">
+        <h2 id="controls-h">Параметры</h2>
+
+        <div class="field">
+          <label class="lbl" for="model">Модель <span class="hint">только поддерживаемые dense</span></label>
+          <select id="model" name="model"></select>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="quant">Квантование весов <span class="hint">официальные файлы</span></label>
+          <select id="quant" name="quant"></select>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="ctx">Контекст, токенов <span class="hint" id="ctx-max">max —</span></label>
+          <input id="ctx" name="ctx" type="number" inputmode="numeric" min="1" step="1" value="8192">
+          <input id="ctxRange" type="range" min="256" max="8192" step="256" value="8192" aria-label="Context size slider">
+        </div>
+
+        <div class="field row2">
+          <div>
+            <label class="lbl" for="batch">Параллельных последовательностей</label>
+            <input id="batch" name="batch" type="number" inputmode="numeric" min="1" max="4096" step="1" value="1">
+          </div>
+          <div>
+            <label class="lbl" for="kvdtype">Тип KV</label>
+            <select id="kvdtype" name="kvdtype">
+              <option value="fp16">fp16 (2 Б)</option>
+              <option value="bf16">bf16 (2 Б)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="overhead">Ручной запас на overhead, GiB
+            <span class="hint">необязательно, не оценка</span></label>
+          <input id="overhead" name="overhead" type="number" inputmode="decimal" min="0" max="4096" step="0.5" placeholder="например 1.0, если измерили">
+        </div>
+
+        <div class="notice" id="notices" hidden></div>
+      </section>
+
+      <section class="card" aria-labelledby="ledger-h">
+        <h2 id="ledger-h">Ledger памяти</h2>
+        <div class="ledger">
+          <div class="line">
+            <div class="k">Веса модели <small id="out-weights-src" class="badge exact">exact</small></div>
+            <div class="v"><b id="out-weights">—</b><span id="out-weights-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">KV-кэш <small id="out-kv-pertoken">—</small></div>
+            <div class="v"><b id="out-kv">—</b><span id="out-kv-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">Промежуточный итог <small>веса + KV</small></div>
+            <div class="v"><b id="out-subtotal">—</b><span id="out-subtotal-bytes">—</span></div>
+          </div>
+          <div class="line">
+            <div class="k">Runtime overhead <small id="out-overhead-bytes">неизвестен · не оценивается</small></div>
+            <div class="v"><b id="out-overhead">—</b></div>
+          </div>
+          <div class="line total">
+            <div class="k"><b>Ledger total</b> <small>арифметическая сумма, НЕ измеренная VRAM</small></div>
+            <div class="v"><b id="out-total">—</b><span id="out-total-bytes">—</span></div>
+          </div>
+        </div>
+
+        <div class="formula" id="formula"></div>
+
+        <div class="notice">
+          <strong>Это не вердикт «влезет».</strong> CUDA-контекст, фрагментация аллокатора, активации и
+          workspace-буферы зависят от рантайма и здесь не оценены. Учитывайте их отдельно, если измеряли.
+        </div>
+
+        <div class="actions">
+          <button type="button" id="copy-report" class="primary">Скопировать отчёт</button>
+          <button type="button" id="copy-link">Скопировать ссылку</button>
+          <a id="share-tg" role="button" class="badge" href="https://t.me/share/url" target="_blank"
+             rel="noopener noreferrer">Поделиться в Telegram ↗</a>
+        </div>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <p class="sr-only" id="results-live" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <section class="card" aria-labelledby="prov-h">
+        <h2 id="prov-h">Источник данных</h2>
+        <div class="prov" id="prov"></div>
+      </section>
+
+      <section class="card" aria-labelledby="limits-h">
+        <h2 id="limits-h">Что модель расчёта НЕ учитывает</h2>
+        <ul class="limits" id="limits"></ul>
+      </section>
+    </div>
+  </main>
+
+  <footer class="bottom">
+    <span>Zexkora Hub · open-source калькулятор, MIT. Без аналитики и без сбора идентификаторов.</span>
+    <span>
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator" rel="noopener noreferrer">Исходники</a> ·
+      <a href="https://github.com/DangerousANEN/llm-vram-calculator/blob/main/docs/quickstart.en.md" rel="noopener noreferrer">Docs (EN)</a>
+    </span>
+  </footer>
+</div>
+
+<script>
+/*__STATE_JS__*/
+</script>
+<script>
+window.VRAM_CATALOG = /*__CATALOG__*/ null;
+</script>
+<script>
+/*__APP_JS__*/
+</script>
+</body>
+</html>

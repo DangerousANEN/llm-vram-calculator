@@ -1,0 +1,16 @@
+### python3 -m pytest -m "not ui"
+..........................................................               [100%]
+130 passed, 16 deselected in 14.58s
+
+### node tests/node/state.test.cjs
+state.test.cjs: OK (12 tests)
+
+### python3 -m pytest -m ui tests/test_ui.py
+.s.s.s.s.s.s.s..                                                         [100%]
+9 passed, 7 skipped in 37.95s
+
+### python3 scripts/build_web.py --check
+OK: index.html is up to date (40914 bytes)
+
+### python3 scripts/fetch_model_metadata.py --check (network metadata re-verification)
+OK: /workspace/vramcalc/data/models.json matches upstream metadata for 2 models
