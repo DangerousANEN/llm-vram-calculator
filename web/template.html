@@ -121,6 +121,14 @@
              rel="noopener noreferrer">Поделиться в Telegram ↗</a>
         </div>
         <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div class="copy-fallback" id="copy-fallback" hidden>
+          <p>
+            Автоматическое копирование недоступно: браузер отклонил доступ к буферу обмена. Текст отчёта
+            ниже уже выделен - скопируйте его вручную (Ctrl+C или Cmd+C).
+          </p>
+          <textarea id="copy-fallback-text" readonly rows="9" spellcheck="false"
+                    aria-label="Текст отчёта для ручного копирования"></textarea>
+        </div>
         <p class="sr-only" id="results-live" aria-live="polite"></p>
       </section>
     </div>

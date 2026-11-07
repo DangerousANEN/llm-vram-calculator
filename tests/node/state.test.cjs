@@ -54,6 +54,14 @@ test("a valid share link round-trips", () => {
   assert.deepStrictEqual(notices, []);
 });
 
+test("fractional context/batch are rejected instead of silently truncated", () => {
+  const { state, notices } = S.parseState("?c=1.5&b=2.5", cat);
+  assert.strictEqual(state.context, 8192);
+  assert.strictEqual(state.batch, 1);
+  assert.ok(notices.some((n) => /Context '1\.5' is not a whole number/.test(n)), notices);
+  assert.ok(notices.some((n) => /Batch '2\.5' is not a whole number/.test(n)), notices);
+});
+
 test("unknown model falls back with a notice", () => {
   const { state, notices } = S.parseState("?m=llama-3-70b", cat);
   assert.strictEqual(state.modelId, "qwen2.5-7b-instruct");

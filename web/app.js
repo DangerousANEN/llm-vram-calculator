@@ -38,6 +38,8 @@
     shareTg: $("share-tg"),
     copyReport: $("copy-report"),
     copyLink: $("copy-link"),
+    copyFallback: $("copy-fallback"),
+    copyFallbackText: $("copy-fallback-text"),
     live: $("results-live")
   };
 
@@ -51,8 +53,11 @@
     return {
       modelId: el.model.value,
       quant: el.quant.value,
-      context: parseInt(el.ctx.value, 10),
-      batch: parseInt(el.batch.value, 10),
+      // Raw strings on purpose: parseWhole() in state.js is the strict parser.
+      // parseInt here would silently turn "1.5" into 1 and "" into NaN before
+      // the user ever saw a notice.
+      context: el.ctx.value,
+      batch: el.batch.value,
       overhead: el.overhead.value === "" ? null : parseFloat(el.overhead.value),
       kvDtype: el.kvDtype.value
     };
@@ -94,17 +99,34 @@
     });
   }
 
+  /** Honest, human-readable basis for the weights byte total. */
+  function weightsBasis(w) {
+    if (w.source === "official_gguf") {
+      return "exact byte sum of the official GGUF shard files at the pinned revision.";
+    }
+    if (w.source === "official_safetensors_size_equivalent") {
+      return (
+        "fp16 size equivalent - the official shards are stored as bfloat16 at 2 bytes per element, " +
+        "so this total is the official BF16 byte size, not a separate FP16 file (there is no separate FP16 file at this revision)."
+      );
+    }
+    return "exact byte sum of the official bf16 safetensors shards at the pinned revision (2 bytes per element).";
+  }
+
   function render() {
     var model = currentModel();
     var ledger = S.computeLedger(model, state);
     var w = model.weights[state.quant];
+    var sizeEquivalent = w.source === "official_safetensors_size_equivalent";
+    var basis = weightsBasis(w);
 
     el.weights.textContent = S.fmtGib(ledger.weightsBytes);
     el.weightsBytes.textContent = S.fmtBytes(ledger.weightsBytes);
-    el.weightsSrc.textContent = "exact official file";
-    el.weightsSrc.className = "badge exact";
+    el.weightsSrc.textContent = sizeEquivalent ? "size equivalent" : "exact official file";
+    el.weightsSrc.className = sizeEquivalent ? "badge est" : "badge exact";
     el.weightsSrc.title =
-      (w.source === "official_gguf" ? "official GGUF file listing" : "official safetensors shard sizes") +
+      (sizeEquivalent ? "size equivalent, not an exact separate file: " : "") +
+      basis +
       " @ revision " + String(w.gguf_revision || model.source.revision).slice(0, 8) +
       " - " + (w.detail || "");
 
@@ -144,6 +166,12 @@
       line.querySelector("code").textContent = r[1];
       el.prov.appendChild(line);
     });
+    // visible (not hover-only) explanation of how the weights byte total was derived
+    var basisNote = document.createElement("p");
+    basisNote.className = "prov-note";
+    basisNote.id = "prov-weights-basis";
+    basisNote.textContent = "Weights byte basis: " + basis;
+    el.prov.appendChild(basisNote);
     var link = document.createElement("a");
     link.href = model.source.revision_url;
     link.rel = "noopener noreferrer nofollow";
@@ -207,28 +235,73 @@
     var parsed = S.parseState(new URLSearchParams({
       m: form.modelId,
       q: form.quant,
-      c: String(Number.isFinite(form.context) ? form.context : 8192),
-      b: String(Number.isFinite(form.batch) ? form.batch : 1),
+      c: form.context,
+      b: form.batch,
       o: el.overhead.value,
       k: form.kvDtype
     }).toString(), CATALOG);
     state = parsed.state;
+    // A blank *entered field* is not the same as an absent URL parameter: the
+    // parser documents "absent or blank -> default, no notice", so the field
+    // level has to say out loud that it fell back instead of staying silent.
+    var notices = parsed.notices.slice();
+    if (String(form.context).trim() === "") {
+      notices.push("Context field was left blank; using the default " + parsed.state.context + " tokens.");
+    }
+    if (String(form.batch).trim() === "") {
+      notices.push("Batch field was left blank; using the default " + parsed.state.batch + " sequence(s).");
+    }
     syncFromState();
-    showNotices(parsed.notices);
+    showNotices(notices);
     render();
   }
 
+  var statusTimer = null;
+
+  function setStatus(message, keepMs) {
+    el.status.textContent = message;
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () {
+      el.status.textContent = "";
+      statusTimer = null;
+    }, keepMs || 2500);
+  }
+
+  function hideManualCopy() {
+    if (!el.copyFallback) return;
+    el.copyFallback.hidden = true;
+    el.copyFallbackText.value = "";
+  }
+
+  /** Honest fallback: show the real text in a selectable box instead of faking success. */
+  function showManualCopy(text) {
+    if (!el.copyFallback) return;
+    el.copyFallback.hidden = false;
+    el.copyFallbackText.value = text;
+    try {
+      el.copyFallbackText.focus();
+      el.copyFallbackText.select();
+    } catch (err) {
+      /* selection is best effort */
+    }
+  }
+
   function copyText(text, okMessage) {
+    var settled = false;
     function done() {
-      el.status.textContent = okMessage;
-      setTimeout(function () { el.status.textContent = ""; }, 2500);
+      if (settled) return;
+      settled = true;
+      hideManualCopy();
+      setStatus(okMessage);
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, fallback);
-    } else {
-      fallback();
+    function failed() {
+      if (settled) return;
+      settled = true;
+      setStatus("Copy failed: the browser refused clipboard access. The text is selected below - copy it manually.", 8000);
+      showManualCopy(text);
     }
-    function fallback() {
+    function execCommandFallback() {
+      if (settled) return;
       var ta = document.createElement("textarea");
       ta.value = text;
       ta.setAttribute("readonly", "");
@@ -236,13 +309,20 @@
       ta.style.top = "-1000px";
       document.body.appendChild(ta);
       ta.select();
+      var copied = false;
       try {
-        document.execCommand("copy");
-        done();
+        copied = document.execCommand("copy") === true;
       } catch (err) {
-        el.status.textContent = "Copy failed \u2014 select the text manually.";
+        copied = false;
       }
       document.body.removeChild(ta);
+      if (copied) done();
+      else failed();
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(text).then(done, execCommandFallback);
+    } else {
+      execCommandFallback();
     }
   }
 

@@ -251,6 +251,27 @@ ul.limits li { margin-bottom: 6px; overflow-wrap: anywhere; }
   margin-top: 6px;
 }
 
+/* manual-copy offer: shown only when every automatic copy path failed */
+.copy-fallback { margin-top: 10px; }
+.copy-fallback[hidden] { display: none; }
+.copy-fallback p { margin: 0 0 6px; font-size: 0.82rem; color: #ffd79b; }
+.copy-fallback textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 150px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: #0a1120;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.prov-note { margin: 4px 0 0; font-size: 0.82rem; color: #b9c8e2; }
+
 footer.bottom {
   margin-top: 28px;
   padding-top: 16px;
