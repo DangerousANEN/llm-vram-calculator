@@ -1,0 +1,5 @@
+# The calculator is a single static page; everything may be crawled.
+User-agent: *
+Allow: /
+
+Sitemap: https://dangerousanen.github.io/llm-vram-calculator/sitemap.xml
