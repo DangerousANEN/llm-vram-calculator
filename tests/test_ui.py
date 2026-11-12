@@ -198,7 +198,7 @@ def total_text(page) -> str:
 def test_default_state_renders_exact_ledger(page, server):
     assert "Zexkora Hub" in page.inner_text("header")
     assert page.title().startswith("Zexkora Hub")
-    assert page.locator("#model option").count() == 2
+    assert page.locator("#model option").count() == 4
 
     model = get_model("qwen2.5-7b-instruct")
     expected = compute_ledger(model, "bf16", 8192).to_dict()

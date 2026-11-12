@@ -202,3 +202,53 @@ rows.
 sees **0 requests**, the CLI exits 2 with `{"error": "benchmark_disabled"}`, and
 `vramcalc/bench.py` carries no `urllib`/`socket`/`http` transport at all. No
 tokens/s figure is claimed in README, docs, CLI or the manifest.
+
+## 2026-11-12 — catalogue extension: Qwen3 14B and Qwen3 4B
+
+Scope: two additional dense Qwen3 configs (GQA, no sliding window, apache-2.0) pinned to immutable
+Hugging Face revisions, plus one honesty fix in the labelled-estimate path. No new architecture class,
+no new network call at runtime, no weights downloaded.
+
+### RED (before the fixtures existed)
+
+```
+docker exec -w /workspace zexkora-growth-sandbox python -m pytest -o addopts='' -q \
+  tests/test_catalog_fixtures.py tests/test_cli.py
+=> 15 failed, 36 passed in 4.88s
+```
+
+Failures were exactly the new expectations: catalogue order/length, pinned revisions for
+`qwen3-14b`/`qwen3-4b`, exact weight bytes against the official listings, fp16/bf16 equivalence,
+dense geometry + KV bytes per token, and the tied-embedding estimate.
+
+### GREEN (sandbox `zexkora-growth-sandbox`, python 3.13.18, pytest 9.2.0)
+
+| Check | Command | Result |
+|---|---|---|
+| Full suite (chromium + firefox inside the container) | `python -m pytest -o addopts='' -q` | **179 passed in 103.15s** (`validation/sandbox_test_run_20261112.log`) |
+| Catalogue vs upstream metadata | `python scripts/fetch_model_metadata.py --check` | `OK: ... matches upstream metadata for 4 models` |
+| Static site freshness | `python scripts/build_web.py --check` | `OK: index.html is up to date (61375 bytes)` |
+| Node URL-state tests | `node tests/node/state.test.cjs` | `OK (20 tests)` |
+| Wheel build + clean-venv smoke | `python -m build` + `/tmp/zvenv/bin/vram-calc calc --model qwen3-14b --quant q4_k_m --ctx 16384 --json` | weights `9001752960` B, ledger total `10.883 GiB`, `kv_cache.bytes_per_token = 163840`, `runtime_overhead.unknown = true` |
+
+### Numbers added (exact, from the official file listings at the pinned revisions)
+
+| model | revision | GGUF revision | bf16 bytes | q4_k_m bytes | KV B/token | max ctx |
+|---|---|---|---|---|---|---|
+| `qwen3-14b` | `40c069824f4251a91eefaf281ebe4c544efd3e18` | `530227a7d994db8eca5ab5ced2fb692b614357fd` | 29 536 665 640 | 9 001 752 960 | 163 840 | 40960 |
+| `qwen3-4b` | `1cfa9a7208912126459214e8b04321603b3df60c` | `bc640142c66e1fdd12af0bd68f40445458f3869b` | 8 044 982 000 | 2 497 280 256 | 147 456 | 40960 |
+
+`qwen3-4b` declares `tie_word_embeddings: true`, so the labelled estimate path now counts one
+embedding matrix instead of two (`tests/test_catalog_fixtures.py::test_tied_embeddings_count_once_in_labelled_estimate`).
+This only affects `--allow-estimate` numbers for quants with no official file listing; the exact
+byte sums are untouched.
+
+### Screenshots (real browser output, inspected with vision)
+
+* `validation/screenshots/desktop-1280-qwen3-14b-16k.png` — Qwen3 14B / q4_k_m, ctx 16384; weights
+  8.384 GiB (9 001 752 960 B), KV 163840 B/token/seq = 2.500 GiB, subtotal/total 10.88 GiB,
+  `Runtime overhead — unknown · not estimated`, formula and pinned provenance shown.
+* `validation/screenshots/mobile-390-qwen3-4b-8k.png` — Qwen3 4B / q4_k_m, ctx 8192, total 3.451 GiB,
+  `document.documentElement.scrollWidth == 390` (no horizontal overflow).
+
+Both were produced by `validation/shots_20261112.py` inside the sandbox container, not by hand.

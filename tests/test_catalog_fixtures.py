@@ -19,7 +19,11 @@ from vramcalc.core import geometry_from_config, kv_bytes_per_token
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
-# Sizes read from huggingface.co/api/models/.../tree/<revision> on 2026-11-07.
+#: Catalogue order is also the UI order; the first entry is the default model.
+SUPPORTED_MODELS = ["qwen2.5-7b-instruct", "qwen3-8b", "qwen3-14b", "qwen3-4b"]
+
+# Sizes read from huggingface.co/api/models/.../tree/<revision> on 2026-11-07,
+# extended on 2026-11-12 with the Qwen3 14B / 4B pinned revisions.
 EXPECTED_WEIGHTS = {
     "qwen2.5-7b-instruct": {
         "bf16": 15_231_271_888,
@@ -42,16 +46,34 @@ EXPECTED_WEIGHTS = {
         "q8_0": 8_709_518_112,
         "q5_0": 5_720_761_152,
     },
+    "qwen3-14b": {
+        "bf16": 29_536_665_640,
+        "fp16": 29_536_665_640,
+        "q4_k_m": 9_001_752_960,
+        "q5_k_m": 10_514_569_568,
+        "q6_k": 12_121_937_248,
+        "q8_0": 15_698_533_728,
+        "q5_0": 10_263_894_400,
+    },
+    "qwen3-4b": {
+        "bf16": 8_044_982_000,
+        "fp16": 8_044_982_000,
+        "q4_k_m": 2_497_280_256,
+        "q5_k_m": 2_889_513_184,
+        "q6_k": 3_306_260_704,
+        "q8_0": 4_280_404_704,
+        "q5_0": 2_823_710_976,
+    },
 }
 
 
-def test_catalogue_has_the_two_required_models(catalog_raw):
-    assert [m["id"] for m in catalog_raw["models"]] == ["qwen2.5-7b-instruct", "qwen3-8b"]
+def test_catalogue_lists_supported_models_in_order(catalog_raw):
+    assert [m["id"] for m in catalog_raw["models"]] == SUPPORTED_MODELS
     assert catalog_raw["schema_version"] == 2
     assert catalog_raw["data_source"] == "huggingface_hub_public_api"
 
 
-@pytest.mark.parametrize("model_id", ["qwen2.5-7b-instruct", "qwen3-8b"])
+@pytest.mark.parametrize("model_id", SUPPORTED_MODELS)
 def test_every_fixture_is_revision_pinned(model_id):
     m = get_model(model_id)
     assert HEX40.match(m["source"]["revision"]), "revision must be a 40-char commit sha"
@@ -69,7 +91,7 @@ def test_weight_bytes_match_official_file_listings(model_id):
         assert m["weights"][quant]["bytes"] == expected, f"{model_id} {quant}"
 
 
-@pytest.mark.parametrize("model_id", ["qwen2.5-7b-instruct", "qwen3-8b"])
+@pytest.mark.parametrize("model_id", SUPPORTED_MODELS)
 def test_weight_entries_are_internally_consistent(model_id):
     m = get_model(model_id)
     for quant, entry in m["weights"].items():
@@ -85,7 +107,7 @@ def test_weight_entries_are_internally_consistent(model_id):
             assert all(f["path"].endswith(".safetensors") for f in entry["files"])
 
 
-@pytest.mark.parametrize("model_id", ["qwen2.5-7b-instruct", "qwen3-8b"])
+@pytest.mark.parametrize("model_id", SUPPORTED_MODELS)
 def test_fp16_and_bf16_are_the_same_bytes(model_id):
     m = get_model(model_id)
     assert m["weights"]["fp16"]["bytes"] == m["weights"]["bf16"]["bytes"]
@@ -97,7 +119,7 @@ def test_quantised_weights_are_smaller_than_bf16(qwen25, qwen3):
             assert m["weights"][q]["bytes"] < m["weights"]["bf16"]["bytes"], (m["id"], q)
 
 
-@pytest.mark.parametrize("model_id", ["qwen2.5-7b-instruct", "qwen3-8b"])
+@pytest.mark.parametrize("model_id", SUPPORTED_MODELS)
 def test_config_geometry_is_dense_and_derivable(model_id):
     m = get_model(model_id)
     geom = geometry_from_config(m["config"])
@@ -125,6 +147,35 @@ def test_approximate_parameter_count_is_in_a_sane_range(qwen25, qwen3):
     assert 7.0e9 < _approx_parameters(qwen3) < 9.5e9
 
 
+def test_tied_embeddings_count_once_in_labelled_estimate():
+    config = {
+        "hidden_size": 2560,
+        "num_hidden_layers": 36,
+        "intermediate_size": 9728,
+        "vocab_size": 151936,
+        "num_attention_heads": 32,
+        "num_key_value_heads": 8,
+        "head_dim": 128,
+    }
+    # ``_approx_parameters`` takes a catalogue entry, so the config is nested.
+    untied = _approx_parameters({"config": {**config, "tie_word_embeddings": False}})
+    tied = _approx_parameters({"config": {**config, "tie_word_embeddings": True}})
+    assert untied - tied == config["vocab_size"] * config["hidden_size"]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "expected_bytes_per_token"),
+    [("qwen3-14b", 163840), ("qwen3-4b", 147456)],
+)
+def test_new_model_kv_geometry_is_config_grounded(model_id, expected_bytes_per_token):
+    model = get_model(model_id)
+    geom = geometry_from_config(model["config"])
+    assert kv_bytes_per_token(geom) == expected_bytes_per_token
+    assert expected_bytes_per_token == (
+        2 * geom.num_hidden_layers * geom.num_key_value_heads * geom.head_dim * 2
+    )
+
+
 def test_model_lookup_accepts_alias_and_is_case_insensitive():
     assert get_model("Qwen3-8B")["id"] == "qwen3-8b"
     assert get_model("  qwen2.5-7b-instruct ")["id"] == "qwen2.5-7b-instruct"
@@ -133,4 +184,4 @@ def test_model_lookup_accepts_alias_and_is_case_insensitive():
 def test_catalog_is_offline(qwen25):
     # no URL fields are allowed to be fetched at runtime; only links for humans
     assert qwen25["source"]["revision_url"].startswith("https://huggingface.co/")
-    assert len(list_models()) == 2
+    assert len(list_models()) == len(SUPPORTED_MODELS)

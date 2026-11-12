@@ -71,6 +71,8 @@ ledger_total       = weights_bytes + kv_bytes + manual_overhead_bytes
 |---|---|---|---|
 | `qwen2.5-7b-instruct` | `Qwen/Qwen2.5-7B-Instruct` | `a09a35458c702b33eeacc393d103063234e8bc28` | `bb5d59e06d9551d752d08b292a50eb208b07ab1f` |
 | `qwen3-8b` | `Qwen/Qwen3-8B` | `b968826d9c46dd6066d109eabc6255188de91218` | `7c41481f57cb95916b40956ab2f0b139b296d974` |
+| `qwen3-14b` | `Qwen/Qwen3-14B` | `40c069824f4251a91eefaf281ebe4c544efd3e18` | `530227a7d994db8eca5ab5ced2fb692b614357fd` |
+| `qwen3-4b` | `Qwen/Qwen3-4B` | `1cfa9a7208912126459214e8b04321603b3df60c` | `bc640142c66e1fdd12af0bd68f40445458f3869b` |
 
 Weights come from the official file listings at those revisions: the exact byte
 sum of the safetensors shards (`bf16`/`fp16`) or of the official GGUF shards

@@ -104,7 +104,10 @@ def _approx_parameters(model: dict) -> int:
     attn = hidden * head_dim * (heads + 2 * kv_heads)
     mlp = 3 * hidden * inter
     per_layer = attn + mlp
-    embeds = 2 * vocab * hidden
+    # A tied embedding matrix is stored once; counting it twice inflates every
+    # labelled estimate for models with ``tie_word_embeddings: true``.
+    embed_matrices = 1 if cfg.get("tie_word_embeddings") is True else 2
+    embeds = embed_matrices * vocab * hidden
     return int(round(layers * per_layer + embeds))
 
 
