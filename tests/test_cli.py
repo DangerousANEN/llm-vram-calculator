@@ -40,7 +40,12 @@ def test_models_lists_both_fixtures_with_revisions():
 def test_models_json_is_machine_readable():
     res = run("models", "--json")
     data = json.loads(res.stdout)
-    assert [m["id"] for m in data["models"]] == ["qwen2.5-7b-instruct", "qwen3-8b"]
+    assert [m["id"] for m in data["models"]] == [
+        "qwen2.5-7b-instruct",
+        "qwen3-8b",
+        "qwen3-14b",
+        "qwen3-4b",
+    ]
     assert data["catalog"]["data_source"] == "huggingface_hub_public_api"
 
 

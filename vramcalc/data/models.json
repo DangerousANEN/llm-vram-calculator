@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-07T10:19:41+00:00",
+  "generated_at": "2026-11-12T10:13:28+00:00",
   "data_source": "huggingface_hub_public_api",
   "notes": [
     "All weight sizes are exact byte sums from official Hugging Face file listings at pinned revisions.",
@@ -403,6 +403,370 @@
             {
               "path": "Qwen3-8B-Q8_0.gguf",
               "bytes": 8709518112
+            }
+          ]
+        }
+      },
+      "estimates": {
+        "bytes_per_param": {
+          "q4_0": 0.6,
+          "q3_k_m": 0.45,
+          "q2_k": 0.35,
+          "fp8": 1.0
+        },
+        "provenance": "Approximate bytes per parameter derived from llama.cpp/gguf quantisation type sizes; NOT part of any official file listing, therefore flagged as an estimate."
+      }
+    },
+    {
+      "id": "qwen3-14b",
+      "display_name": "Qwen3 14B",
+      "short_name": "Qwen3-14B",
+      "family": "Qwen3",
+      "license": "apache-2.0",
+      "source": {
+        "hub": "huggingface",
+        "repo": "Qwen/Qwen3-14B",
+        "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+        "revision_url": "https://huggingface.co/Qwen/Qwen3-14B/tree/40c069824f4251a91eefaf281ebe4c544efd3e18",
+        "config_url": "https://huggingface.co/Qwen/Qwen3-14B/raw/40c069824f4251a91eefaf281ebe4c544efd3e18/config.json",
+        "config_sha256": "e73c3664ca09b10a673fef0c22e8a6b456201d49bd4713c9691f775720e8857a",
+        "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+        "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+        "gguf_revision_url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/tree/530227a7d994db8eca5ab5ced2fb692b614357fd"
+      },
+      "config": {
+        "architectures": [
+          "Qwen3ForCausalLM"
+        ],
+        "attention_bias": false,
+        "attention_dropout": 0.0,
+        "bos_token_id": 151643,
+        "eos_token_id": 151645,
+        "head_dim": 128,
+        "hidden_act": "silu",
+        "hidden_size": 5120,
+        "initializer_range": 0.02,
+        "intermediate_size": 17408,
+        "max_position_embeddings": 40960,
+        "max_window_layers": 40,
+        "model_type": "qwen3",
+        "num_attention_heads": 40,
+        "num_hidden_layers": 40,
+        "num_key_value_heads": 8,
+        "rms_norm_eps": 1e-06,
+        "rope_scaling": null,
+        "rope_theta": 1000000,
+        "sliding_window": null,
+        "tie_word_embeddings": false,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.51.0",
+        "use_cache": true,
+        "use_sliding_window": false,
+        "vocab_size": 151936
+      },
+      "weights": {
+        "bf16": {
+          "bytes": 29536665640,
+          "source": "official_safetensors",
+          "detail": "exact byte sum of the official safetensors shards at the pinned revision",
+          "files": [
+            {
+              "path": "model-00001-of-00008.safetensors",
+              "bytes": 3841788544
+            },
+            {
+              "path": "model-00002-of-00008.safetensors",
+              "bytes": 3963750816
+            },
+            {
+              "path": "model-00003-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00004-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00005-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00006-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00007-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00008-of-00008.safetensors",
+              "bytes": 1912371880
+            }
+          ]
+        },
+        "fp16": {
+          "bytes": 29536665640,
+          "source": "official_safetensors_size_equivalent",
+          "detail": "the official shards are stored as bfloat16; fp16 has the same 2 bytes/parameter, so the resident weight size is identical",
+          "files": [
+            {
+              "path": "model-00001-of-00008.safetensors",
+              "bytes": 3841788544
+            },
+            {
+              "path": "model-00002-of-00008.safetensors",
+              "bytes": 3963750816
+            },
+            {
+              "path": "model-00003-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00004-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00005-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00006-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00007-of-00008.safetensors",
+              "bytes": 3963750880
+            },
+            {
+              "path": "model-00008-of-00008.safetensors",
+              "bytes": 1912371880
+            }
+          ]
+        },
+        "q4_k_m": {
+          "bytes": 9001752960,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+          "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q4_K_M.gguf",
+              "bytes": 9001752960
+            }
+          ]
+        },
+        "q5_0": {
+          "bytes": 10263894400,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+          "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q5_0.gguf",
+              "bytes": 10263894400
+            }
+          ]
+        },
+        "q5_k_m": {
+          "bytes": 10514569568,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+          "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q5_K_M.gguf",
+              "bytes": 10514569568
+            }
+          ]
+        },
+        "q6_k": {
+          "bytes": 12121937248,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+          "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q6_K.gguf",
+              "bytes": 12121937248
+            }
+          ]
+        },
+        "q8_0": {
+          "bytes": 15698533728,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+          "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q8_0.gguf",
+              "bytes": 15698533728
+            }
+          ]
+        }
+      },
+      "estimates": {
+        "bytes_per_param": {
+          "q4_0": 0.6,
+          "q3_k_m": 0.45,
+          "q2_k": 0.35,
+          "fp8": 1.0
+        },
+        "provenance": "Approximate bytes per parameter derived from llama.cpp/gguf quantisation type sizes; NOT part of any official file listing, therefore flagged as an estimate."
+      }
+    },
+    {
+      "id": "qwen3-4b",
+      "display_name": "Qwen3 4B",
+      "short_name": "Qwen3-4B",
+      "family": "Qwen3",
+      "license": "apache-2.0",
+      "source": {
+        "hub": "huggingface",
+        "repo": "Qwen/Qwen3-4B",
+        "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+        "revision_url": "https://huggingface.co/Qwen/Qwen3-4B/tree/1cfa9a7208912126459214e8b04321603b3df60c",
+        "config_url": "https://huggingface.co/Qwen/Qwen3-4B/raw/1cfa9a7208912126459214e8b04321603b3df60c/config.json",
+        "config_sha256": "8ba006f74fecfaaeb392872a60f4a480e7ec9860153d2e1b769ec81f9a147f8a",
+        "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+        "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+        "gguf_revision_url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/tree/bc640142c66e1fdd12af0bd68f40445458f3869b"
+      },
+      "config": {
+        "architectures": [
+          "Qwen3ForCausalLM"
+        ],
+        "attention_bias": false,
+        "attention_dropout": 0.0,
+        "bos_token_id": 151643,
+        "eos_token_id": 151645,
+        "head_dim": 128,
+        "hidden_act": "silu",
+        "hidden_size": 2560,
+        "initializer_range": 0.02,
+        "intermediate_size": 9728,
+        "max_position_embeddings": 40960,
+        "max_window_layers": 36,
+        "model_type": "qwen3",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 36,
+        "num_key_value_heads": 8,
+        "rms_norm_eps": 1e-06,
+        "rope_scaling": null,
+        "rope_theta": 1000000,
+        "sliding_window": null,
+        "tie_word_embeddings": true,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.51.0",
+        "use_cache": true,
+        "use_sliding_window": false,
+        "vocab_size": 151936
+      },
+      "weights": {
+        "bf16": {
+          "bytes": 8044982000,
+          "source": "official_safetensors",
+          "detail": "exact byte sum of the official safetensors shards at the pinned revision",
+          "files": [
+            {
+              "path": "model-00001-of-00003.safetensors",
+              "bytes": 3957900840
+            },
+            {
+              "path": "model-00002-of-00003.safetensors",
+              "bytes": 3987450520
+            },
+            {
+              "path": "model-00003-of-00003.safetensors",
+              "bytes": 99630640
+            }
+          ]
+        },
+        "fp16": {
+          "bytes": 8044982000,
+          "source": "official_safetensors_size_equivalent",
+          "detail": "the official shards are stored as bfloat16; fp16 has the same 2 bytes/parameter, so the resident weight size is identical",
+          "files": [
+            {
+              "path": "model-00001-of-00003.safetensors",
+              "bytes": 3957900840
+            },
+            {
+              "path": "model-00002-of-00003.safetensors",
+              "bytes": 3987450520
+            },
+            {
+              "path": "model-00003-of-00003.safetensors",
+              "bytes": 99630640
+            }
+          ]
+        },
+        "q4_k_m": {
+          "bytes": 2497280256,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+          "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q4_K_M.gguf",
+              "bytes": 2497280256
+            }
+          ]
+        },
+        "q5_0": {
+          "bytes": 2823710976,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+          "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q5_0.gguf",
+              "bytes": 2823710976
+            }
+          ]
+        },
+        "q5_k_m": {
+          "bytes": 2889513184,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+          "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q5_K_M.gguf",
+              "bytes": 2889513184
+            }
+          ]
+        },
+        "q6_k": {
+          "bytes": 3306260704,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+          "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q6_K.gguf",
+              "bytes": 3306260704
+            }
+          ]
+        },
+        "q8_0": {
+          "bytes": 4280404704,
+          "source": "official_gguf",
+          "detail": "exact byte sum of the official GGUF shard files at the pinned revision",
+          "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+          "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q8_0.gguf",
+              "bytes": 4280404704
             }
           ]
         }

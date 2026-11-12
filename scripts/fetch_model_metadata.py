@@ -83,6 +83,32 @@ FIXTURES = [
         "license": "apache-2.0",
         "weights_stored_dtype": "bfloat16",
     },
+    {
+        "id": "qwen3-14b",
+        "display_name": "Qwen3 14B",
+        "short_name": "Qwen3-14B",
+        "family": "Qwen3",
+        "repo": "Qwen/Qwen3-14B",
+        "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+        "gguf_repo": "Qwen/Qwen3-14B-GGUF",
+        "gguf_revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+        "gguf_prefix": "Qwen3-14B",
+        "license": "apache-2.0",
+        "weights_stored_dtype": "bfloat16",
+    },
+    {
+        "id": "qwen3-4b",
+        "display_name": "Qwen3 4B",
+        "short_name": "Qwen3-4B",
+        "family": "Qwen3",
+        "repo": "Qwen/Qwen3-4B",
+        "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+        "gguf_repo": "Qwen/Qwen3-4B-GGUF",
+        "gguf_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+        "gguf_prefix": "Qwen3-4B",
+        "license": "apache-2.0",
+        "weights_stored_dtype": "bfloat16",
+    },
 ]
 
 
