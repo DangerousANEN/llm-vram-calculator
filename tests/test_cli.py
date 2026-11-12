@@ -159,7 +159,7 @@ def test_json_error_output_is_parseable():
 def test_version_flag():
     res = run("--version")
     assert res.returncode == 0
-    assert "2.0.0" in res.stdout
+    assert "2.1.0" in res.stdout
 
 
 def test_legacy_script_shim_still_runs_with_migration_notice():
