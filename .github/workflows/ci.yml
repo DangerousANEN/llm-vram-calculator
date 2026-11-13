@@ -13,7 +13,10 @@ concurrency:
 jobs:
   tests:
     name: tests (py${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04, for which setup-python has no Python 3.9
+    # build; the 3.9 leg is still a supported version of this package, so the
+    # matrix runs on 24.04 where provisioning works.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
