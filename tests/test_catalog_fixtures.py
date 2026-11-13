@@ -147,6 +147,54 @@ def test_approximate_parameter_count_is_in_a_sane_range(qwen25, qwen3):
     assert 7.0e9 < _approx_parameters(qwen3) < 9.5e9
 
 
+#: Exact parameter totals from huggingface.co/api/models/<repo> (``safetensors.total``)
+#: at the pinned revisions, read 2026-11-13. This is the authoritative count the
+#: labelled estimate multiplies by bytes/parameter; the exact weight figures in the
+#: catalogue still come from official file listings, never from this number.
+OFFICIAL_PARAM_COUNTS = {
+    "qwen2.5-7b-instruct": 7_615_616_512,
+    "qwen3-8b": 8_190_735_360,
+    "qwen3-14b": 14_768_307_200,
+    "qwen3-4b": 4_022_468_096,
+}
+
+
+@pytest.mark.parametrize("model_id", SUPPORTED_MODELS)
+def test_labelled_estimate_basis_matches_official_parameter_count(model_id):
+    """``--allow-estimate`` multiplies bytes/parameter by this count, so the count
+    must describe the real architecture: Q, K, V, the attention OUTPUT projection,
+    the MLP and the embeddings. A missing projection silently under-prices every
+    labelled estimate while still looking authoritative."""
+    model = get_model(model_id)
+    approx = _approx_parameters(model)
+    official = OFFICIAL_PARAM_COUNTS[model_id]
+    rel = abs(approx - official) / official
+    assert rel < 0.005, (
+        f"{model_id}: labelled-estimate basis {approx} differs from the official "
+        f"parameter count {official} by {rel:.2%} (>0.5%)"
+    )
+
+
+def test_estimate_counts_the_attention_output_projection():
+    # Hand-computable 2-layer toy: Q = K/V pairs + the output projection, so the
+    # per-layer attention term is hidden*head_dim*(2*heads + 2*kv_heads).
+    config = {
+        "hidden_size": 1024,
+        "num_hidden_layers": 2,
+        "intermediate_size": 4096,
+        "vocab_size": 1000,
+        "num_attention_heads": 8,
+        "num_key_value_heads": 2,
+        "head_dim": 128,
+        "tie_word_embeddings": True,
+    }
+    attn_per_layer = 1024 * 128 * (2 * 8 + 2 * 2)  # Q + K + V + O
+    mlp_per_layer = 3 * 1024 * 4096
+    embeds = 1000 * 1024  # tied embedding matrix counted once
+    expected = 2 * (attn_per_layer + mlp_per_layer) + embeds
+    assert _approx_parameters({"config": config}) == expected
+
+
 def test_tied_embeddings_count_once_in_labelled_estimate():
     config = {
         "hidden_size": 2560,

@@ -252,3 +252,56 @@ byte sums are untouched.
   `document.documentElement.scrollWidth == 390` (no horizontal overflow).
 
 Both were produced by `validation/shots_20261112.py` inside the sandbox container, not by hand.
+
+## 2026-11-13: labelled-estimate basis fixed to count the attention output projection (v2.1.1)
+
+The `--allow-estimate` path multiplies bytes/parameter by a parameter count derived
+from the config (`_approx_parameters`). The formula counted Q, K and V but **omitted
+the output projection**, so every labelled estimate was 4.7–9.4% low while still
+looking authoritative.
+
+### RED (new tests against the pre-fix tree, inside the container)
+
+```
+$ python3 -m pytest tests/test_catalog_fixtures.py -k "estimate_basis or output_projection" -q
+FAILED ...::test_labelled_estimate_basis_matches_official_parameter_count[qwen2.5-7b-instruct]
+FAILED ...::test_labelled_estimate_basis_matches_official_parameter_count[qwen3-8b]
+FAILED ...::test_labelled_estimate_basis_matches_official_parameter_count[qwen3-14b]
+FAILED ...::test_labelled_estimate_basis_matches_official_parameter_count[qwen3-4b]
+FAILED ...::test_estimate_counts_the_attention_output_projection
+```
+Ground truth: `safetensors.total` from huggingface.co/api/models/<repo> (read
+2026-11-13): Qwen2.5-7B 7 615 616 512, Qwen3-8B 8 190 735 360, Qwen3-14B
+14 768 307 200, Qwen3-4B 4 022 468 096. Pre-fix bases: 7 255 621 632 (−4.73%),
+7 586 447 360 (−7.38%), 13 719 306 240 (−7.10%), 3 644 784 640 (−9.39%) — all
+far outside the 0.5% tolerance.
+
+### GREEN (after `attn = hidden*head_dim*(2*heads + 2*kv_heads)`)
+
+| model | approx basis | official `safetensors.total` | relative error |
+|---|---|---|---|
+| qwen2.5-7b-instruct | 7 615 283 200 | 7 615 616 512 | 0.0044% |
+| qwen3-8b | 8 190 427 136 | 8 190 735 360 | 0.0038% |
+| qwen3-14b | 14 767 882 240 | 14 768 307 200 | 0.0029% |
+| qwen3-4b | 4 022 272 000 | 4 022 468 096 | 0.0049% |
+
+```
+$ python3 -m pytest tests/test_catalog_fixtures.py -k "estimate_basis or output_projection or sane_range or tied" -q
+7 passed
+$ python3 -m pytest -o addopts='' -q
+184 passed in 108.95s   # full suite, chromium + firefox inside the container
+$ node tests/node/state.test.cjs
+state.test.cjs: OK (20 tests)
+$ python3 scripts/build_web.py --check
+OK: index.html is up to date (61375 bytes)   # page content unchanged by this fix
+$ python3 -m build && fresh venv: /tmp/venv211/bin/vram-calc --version
+llm-vram-calculator 2.1.1
+$ /tmp/venv211/bin/vram-calc calc --model qwen3-14b --quant q4_0 --ctx 8192 --allow-estimate --json
+weights 8 860 729 344 B, source estimated_bytes_per_param, estimated true, ledger 9.5022 GiB
+```
+
+Behaviour check: qwen3-14b q4_0 estimate went from 8.23 GiB (0.6 x 13.72B) to
+8.86 GiB (0.6 x 14.77B) — the honest number for a 14.8B model. Exact quants
+(bf16/q4_k_m/…, from official file listings) are untouched: they never use
+`_approx_parameters`. Docs updated in both languages (README.md,
+docs/quickstart.en.md) with the basis and the 0.5% test tolerance.

@@ -76,7 +76,12 @@ ledger_total       = weights_bytes + kv_bytes + manual_overhead_bytes
 
 Weights come from the official file listings at those revisions: the exact byte
 sum of the safetensors shards (`bf16`/`fp16`) or of the official GGUF shards
-(`q8_0`, `q6_k`, `q5_k_m`, `q5_0`, `q4_k_m`, …). Regenerate or verify the
+(`q8_0`, `q6_k`, `q5_k_m`, `q5_0`, `q4_k_m`, …). If a requested quantisation has
+no official listing, the CLI refuses and offers `--allow-estimate`: a labelled
+bytes-per-parameter estimate whose parameter count is derived from the config
+(attention Q/K/V including the output projection, the three MLP matrices,
+embeddings) and is tested against the official `safetensors.total` with a 0.5%
+tolerance. Regenerate or verify the
 metadata (metadata only, no weights are downloaded):
 
 ```bash
