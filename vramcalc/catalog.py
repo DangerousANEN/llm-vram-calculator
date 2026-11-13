@@ -92,7 +92,14 @@ def model_quant_entry(model: dict, quant: str, allow_estimate: bool = False) -> 
 
 
 def _approx_parameters(model: dict) -> int:
-    """Parameter count for estimate arithmetic only (never used for KV geometry)."""
+    """Parameter count for estimate arithmetic only (never used for KV geometry).
+
+    Counts the named matrices of a dense Qwen2/Qwen3 block: attention Q, K, V and
+    the **output projection**, the three MLP matrices, and the embedding/LM-head
+    matrices (a tied matrix is counted once). RMSNorm weights and biases are
+    ``O(layers * hidden)`` - below 0.01% of the total - and are left out on
+    purpose, so this stays a labelled approximation.
+    """
     cfg = model.get("config", {})
     hidden = int(cfg.get("hidden_size") or 0)
     layers = int(cfg.get("num_hidden_layers") or 0)
@@ -101,7 +108,10 @@ def _approx_parameters(model: dict) -> int:
     heads = int(cfg.get("num_attention_heads") or 0)
     kv_heads = int(cfg.get("num_key_value_heads") or heads or 0)
     head_dim = int(cfg.get("head_dim") or (hidden // heads if heads else 0))
-    attn = hidden * head_dim * (heads + 2 * kv_heads)
+    # Q (heads) + K and V (kv_heads each) + O (heads again): the output
+    # projection is the same size as Q and must not be dropped, or every
+    # labelled estimate is 5-10% low while still looking exact.
+    attn = hidden * head_dim * (2 * heads + 2 * kv_heads)
     mlp = 3 * hidden * inter
     per_layer = attn + mlp
     # A tied embedding matrix is stored once; counting it twice inflates every

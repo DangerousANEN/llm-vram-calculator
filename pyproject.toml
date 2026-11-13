@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-vram-calculator"
-version = "2.1.0"
+version = "2.1.1"
 authors = [
   { name = "DangerousANEN", email = "anen@local.dev" },
 ]
