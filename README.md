@@ -119,6 +119,13 @@ error [legacy_params_removed]: ... Use --model qwen2.5-7b-instruct ...
 python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic
 ```
 
+Этот миграционный режим тоже не выбрасывает ваши флаги: `--kv-dtype` печатается
+как использованный тип элемента KV, а `--overhead-gib 2` добавляется отдельной
+строкой «manual overhead … bound provided by the user, not estimated» с суммой
+«total + bound». Без флага ручной границы в выводе нет — молча ничего не
+подставляется; выход за диапазон 0..4096 GiB и `nan` отклоняются с кодом
+`invalid_overhead`/`nonfinite_overhead` (exit 2).
+
 ### Бенчмарк: временно отключён
 
 Релиз 2.0 — это калькулятор памяти, а не тест скорости. Старый потоковый
