@@ -116,6 +116,55 @@ def test_legacy_heuristic_json_is_flagged():
     assert data["mode"] == "legacy_heuristic"
 
 
+def test_legacy_heuristic_honours_a_manual_overhead_bound():
+    """An explicit --overhead-gib must never be accepted and then dropped."""
+    res = run(
+        "calc", "--params", "7", "--quant", "q4_k_m", "--ctx", "8192",
+        "--legacy-heuristic", "--overhead-gib", "2", "--json",
+    )
+    assert res.returncode == 0, res.stderr
+    data = json.loads(res.stdout)
+    assert data["manual_overhead_gib"] == 2.0
+    assert data["manual_overhead_bytes"] == 2 * 1024 ** 3
+    assert data["total_with_overhead_gib"] == pytest.approx(data["total_gib"] + 2.0, abs=1e-4)
+    assert any("manual overhead" in a.lower() for a in data["assumptions"])
+
+    human = run(
+        "calc", "--params", "7", "--quant", "q4_k_m", "--ctx", "8192",
+        "--legacy-heuristic", "--overhead-gib", "2",
+    )
+    assert human.returncode == 0, human.stderr
+    assert "2.000 GiB" in human.stdout
+    assert "manual overhead" in human.stdout.lower()
+    # ... and the same command without the bound must print something different
+    plain = run("calc", "--params", "7", "--quant", "q4_k_m", "--ctx", "8192", "--legacy-heuristic")
+    assert "manual overhead" not in plain.stdout.lower()
+    assert "2.000 GiB" not in plain.stdout
+
+
+def test_legacy_heuristic_reports_the_kv_dtype_it_used():
+    res = run("calc", "--params", "7", "--legacy-heuristic", "--kv-dtype", "bf16", "--json")
+    assert res.returncode == 0, res.stderr
+    data = json.loads(res.stdout)
+    assert data["kv_dtype"] == "bf16"
+    assert data["kv_bytes_per_element"] == 2
+    human = run("calc", "--params", "7", "--legacy-heuristic", "--kv-dtype", "bf16")
+    assert human.returncode == 0, human.stderr
+    assert "bf16" in human.stdout
+
+
+def test_legacy_heuristic_refuses_an_out_of_range_overhead():
+    res = run("calc", "--params", "7", "--legacy-heuristic", "--overhead-gib", "5000")
+    assert res.returncode == 2
+    assert "invalid_overhead" in res.stderr
+
+
+def test_legacy_heuristic_refuses_a_nonfinite_overhead():
+    res = run("calc", "--params", "7", "--legacy-heuristic", "--overhead-gib", "nan")
+    assert res.returncode == 2
+    assert "nonfinite_overhead" in res.stderr
+
+
 def test_mla_flag_is_refused():
     res = run("calc", "--params", "671", "--mla", "--legacy-heuristic", "--ctx", "32768")
     assert res.returncode == 2

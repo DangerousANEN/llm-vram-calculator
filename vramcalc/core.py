@@ -504,6 +504,7 @@ def legacy_heuristic_estimate(
     context: int = 8192,
     batch: int = 1,
     kv_dtype: str = "fp16",
+    manual_overhead_gib: float | None = None,
 ) -> dict:
     """Reproduce the OLD heuristic, explicitly labelled as non-config-grounded.
 
@@ -511,6 +512,10 @@ def legacy_heuristic_estimate(
     KV heads and head_dim 128. That is kept here behind ``--legacy-heuristic`` so
     existing users get a migration path, but the result is flagged
     ``config_grounded: False`` and is never presented as a ledger.
+
+    ``kv_dtype`` and ``manual_overhead_gib`` are recorded rather than ignored: a
+    caller that passes ``--kv-dtype``/``--overhead-gib`` must see which element
+    type was used and must never have an explicit bound silently dropped.
     """
     p = float(params_b)
     if not math.isfinite(p) or p <= 0 or p > 100_000:
@@ -530,11 +535,35 @@ def legacy_heuristic_estimate(
         raise InvalidParameter("context*batch exceeds the supported bound", code="positions_too_large")
     kv_dtype = _normalise_kv_dtype(kv_dtype)
 
+    overhead_bytes = None
+    if manual_overhead_gib is not None:
+        overhead_gib = float(manual_overhead_gib)
+        if not math.isfinite(overhead_gib):
+            raise InvalidParameter("manual overhead must be finite", code="nonfinite_overhead")
+        if overhead_gib < 0 or overhead_gib > 4096:
+            raise InvalidParameter(
+                f"manual overhead {overhead_gib} GiB is outside the accepted range 0..4096",
+                code="invalid_overhead",
+            )
+        overhead_bytes = int(round(overhead_gib * GIB))
+
     layers = int(math.ceil(14 + 7 * math.log2(max(1.0, p))))
     kv_heads = 8
     head_dim = 128
     weights_bytes = int(round(p * 1e9 * LEGACY_BYTES_PER_PARAM[q]))
     kv_bytes = 2 * layers * kv_heads * head_dim * KV_DTYPE_BYTES[kv_dtype] * context * batch
+    assumptions = [
+        f"layers guessed as ceil(14 + 7*log2({p})) = {layers}",
+        f"KV heads hard-coded to {kv_heads}, head_dim hard-coded to {head_dim}",
+        "weights = params * bytes/param (no official file size involved)",
+    ]
+    if overhead_bytes is None:
+        assumptions.append("no runtime overhead included; not a ledger total")
+    else:
+        assumptions.append(
+            f"manual overhead bound provided by the user: {manual_overhead_gib} GiB "
+            "(not estimated by the tool)"
+        )
     return {
         "mode": "legacy_heuristic",
         "config_grounded": False,
@@ -542,16 +571,18 @@ def legacy_heuristic_estimate(
         "quant": q,
         "context": context,
         "batch": batch,
-        "assumptions": [
-            f"layers guessed as ceil(14 + 7*log2({p})) = {layers}",
-            f"KV heads hard-coded to {kv_heads}, head_dim hard-coded to {head_dim}",
-            "weights = params * bytes/param (no official file size involved)",
-            "no runtime overhead included; not a ledger total",
-        ],
+        "kv_dtype": kv_dtype,
+        "kv_bytes_per_element": KV_DTYPE_BYTES[kv_dtype],
+        "assumptions": assumptions,
         "weights_bytes": weights_bytes,
         "weights_gib": round(weights_bytes / GIB, 4),
         "kv_bytes": kv_bytes,
         "kv_gib": round(kv_bytes / GIB, 4),
         "total_gib": round((weights_bytes + kv_bytes) / GIB, 4),
+        "manual_overhead_gib": None if overhead_bytes is None else float(manual_overhead_gib),
+        "manual_overhead_bytes": overhead_bytes,
+        "total_with_overhead_gib": None
+        if overhead_bytes is None
+        else round((weights_bytes + kv_bytes + overhead_bytes) / GIB, 4),
         "warning": "HEURISTIC, not config-grounded: use --model for a real ledger.",
     }

@@ -211,7 +211,14 @@ def _cmd_calc(args) -> int:
     if args.params is not None and not args.legacy_heuristic:
         refuse_legacy_params(args.params)
     if args.params is not None and args.legacy_heuristic:
-        est = legacy_heuristic_estimate(args.params, args.quant, args.ctx, args.batch)
+        est = legacy_heuristic_estimate(
+            args.params,
+            args.quant,
+            args.ctx,
+            args.batch,
+            kv_dtype=args.kv_dtype,
+            manual_overhead_gib=args.overhead_gib,
+        )
         if args.json:
             print(json.dumps(est, indent=2, ensure_ascii=False))
             return 0
@@ -226,9 +233,21 @@ def _cmd_calc(args) -> int:
         for k in est["assumptions"]:
             print(f"   - {k}")
         print("-" * 68)
+        print(f" KV dtype          : {est['kv_dtype']} ({est['kv_bytes_per_element']} bytes/element)")
         print(f" estimated weights : {est['weights_gib']:.3f} GiB ({est['weights_bytes']} bytes)")
         print(f" estimated KV      : {est['kv_gib']:.3f} GiB ({est['kv_bytes']} bytes)")
-        print(f" heuristic total   : {est['total_gib']:.3f} GiB (no overhead estimate included)")
+        if est["manual_overhead_gib"] is None:
+            print(f" heuristic total   : {est['total_gib']:.3f} GiB (no overhead estimate included)")
+        else:
+            print(f" heuristic total   : {est['total_gib']:.3f} GiB (weights + KV only)")
+            print(
+                f" manual overhead   : {est['manual_overhead_gib']:.3f} GiB "
+                f"({est['manual_overhead_bytes']} bytes, bound provided by the user, not estimated)"
+            )
+            print(
+                f" total + bound     : {est['total_with_overhead_gib']:.3f} GiB "
+                "(arithmetic sum; still not a ledger total)"
+            )
         print("=" * 68)
         print(f" migrate: python -m vram_calc calc --model <id> --quant {args.quant} --ctx {args.ctx}")
         print()

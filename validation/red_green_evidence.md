@@ -305,3 +305,52 @@ Behaviour check: qwen3-14b q4_0 estimate went from 8.23 GiB (0.6 x 13.72B) to
 (bf16/q4_k_m/…, from official file listings) are untouched: they never use
 `_approx_parameters`. Docs updated in both languages (README.md,
 docs/quickstart.en.md) with the basis and the 0.5% test tolerance.
+
+## 2026-11-16: legacy migration mode no longer swallows --overhead-gib / --kv-dtype (v2.1.2)
+
+`calc --params N --legacy-heuristic` passed only `params/quant/ctx/batch` to
+`legacy_heuristic_estimate`, so `--overhead-gib 2` was accepted by argparse and then
+silently dropped (exit 0, a total 2 GiB lower than the user asked for) and the KV
+element type was not printed at all. The ledger path honoured both flags, so the two
+modes disagreed about the same CLI surface.
+
+### RED (new tests against the pre-fix tree, inside the sandbox container)
+
+```
+$ python3 -m pytest tests/test_cli.py -k legacy -q
+FAILED tests/test_cli.py::test_legacy_heuristic_honours_a_manual_overhead_bound
+FAILED tests/test_cli.py::test_legacy_heuristic_reports_the_kv_dtype_it_used
+FAILED tests/test_cli.py::test_legacy_heuristic_refuses_an_out_of_range_overhead
+FAILED tests/test_cli.py::test_legacy_heuristic_refuses_a_nonfinite_overhead
+# KeyError: 'kv_dtype'; `--overhead-gib 5000` and `--overhead-gib nan` returned 0
+```
+
+### GREEN (after passing both flags through, with the same validation as the ledger)
+
+```
+$ python3 -m pytest tests/test_cli.py -k legacy -q
+4 passed
+$ python3 -m pytest -o addopts='' -q
+188 passed in 74.04s        # full suite, chromium + firefox inside the container
+$ node tests/node/state.test.cjs
+state.test.cjs: OK (20 tests)
+$ python3 scripts/build_web.py --check
+OK: index.html is up to date (61375 bytes)   # the page is untouched by this fix
+```
+
+Human output for `--params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic --overhead-gib 2 --kv-dtype bf16`:
+
+```
+ KV dtype          : bf16 (2 bytes/element)
+ estimated weights : 3.833 GiB (4116000000 bytes)
+ estimated KV      : 1.062 GiB (1140850688 bytes)
+ heuristic total   : 4.896 GiB (weights + KV only)
+ manual overhead   : 2.000 GiB (2147483648 bytes, bound provided by the user, not estimated)
+ total + bound     : 6.896 GiB (arithmetic sum; still not a ledger total)
+```
+
+`total_gib` keeps its documented meaning (weights + KV); the bound appears as
+`manual_overhead_gib` / `manual_overhead_bytes` / `total_with_overhead_gib` in JSON and
+as separate labelled lines in the human output, and only when the user passed it.
+Out-of-range (`5000`) and non-finite (`nan`) bounds are refused with
+`invalid_overhead` / `nonfinite_overhead` (exit 2) exactly like the ledger path.
