@@ -13,7 +13,7 @@ import json
 import sys
 
 from . import __version__
-from .errors import CalcError
+from .errors import CalcError, InvalidParameter
 from .catalog import corpus_facts, get_model, list_models, published_quants
 from .core import (
     GIB,
@@ -183,6 +183,50 @@ def _print_ledger(d: dict) -> None:
     print()
 
 
+def _refuse_conflicting_model_and_params(args) -> None:
+    """``--params`` and ``--model`` name the model in two incompatible ways.
+
+    The legacy heuristic derives layers and KV heads from a parameter count; a
+    catalogue id derives them from a pinned config. A run that passed both used
+    to exit 0 and silently ignore ``--model`` - the printed estimate never
+    mentioned the model and even an unknown id was accepted. Refuse instead:
+    an explicit argument must never be dropped, so the user has to say which
+    question they are asking.
+    """
+    if args.params is None or not args.legacy_heuristic:
+        return
+    if args.model:
+        raise InvalidParameter(
+            f"--params {args.params} and --model {args.model} ask for two different things: "
+            "--params runs the old parameter-count heuristic (layers and KV heads guessed, NOT "
+            "config-grounded), while --model reads the pinned config of a catalogue model. "
+            f"Pick one: `calc --model {args.model} --quant {args.quant} --ctx {args.ctx}` for a real "
+            f"ledger, or `calc --params {args.params} --legacy-heuristic --quant {args.quant} "
+            f"--ctx {args.ctx}` for the labelled rough estimate. Neither flag is dropped silently.",
+            code="conflicting_model_and_params",
+            details={
+                "model": args.model,
+                "params_b": args.params,
+                "model_command": (
+                    f"python -m vram_calc calc --model {args.model} --quant {args.quant} --ctx {args.ctx}"
+                ),
+                "params_command": (
+                    f"python -m vram_calc calc --params {args.params} --legacy-heuristic "
+                    f"--quant {args.quant} --ctx {args.ctx}"
+                ),
+            },
+        )
+    if args.allow_estimate:
+        raise InvalidParameter(
+            "--allow-estimate has no effect with --legacy-heuristic: the legacy mode always multiplies "
+            "the parameter count by a fixed bytes/parameter table entry and never consults an official "
+            "file listing, so there is nothing to allow or refuse. Drop --allow-estimate, or use "
+            "--model for a ledger where a labelled estimate is meaningful.",
+            code="irrelevant_flag_for_legacy_mode",
+            details={"flag": "--allow-estimate", "mode": "legacy_heuristic"},
+        )
+
+
 def _refuse_removed_flags(args) -> None:
     """Removed flags are refused before anything else, so they can never slip
     through the legacy migration path and look supported."""
@@ -208,6 +252,7 @@ def _refuse_removed_flags(args) -> None:
 
 def _cmd_calc(args) -> int:
     _refuse_removed_flags(args)
+    _refuse_conflicting_model_and_params(args)
     if args.params is not None and not args.legacy_heuristic:
         refuse_legacy_params(args.params)
     if args.params is not None and args.legacy_heuristic:
