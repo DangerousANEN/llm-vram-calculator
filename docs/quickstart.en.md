@@ -104,6 +104,8 @@ would be wrong:
 | quantised KV cache (`--kv-quant fp8`) | `unsupported_kv_dtype` |
 | CPU offload (`--cpu-offload-gib`) | `offload_unsupported` |
 | legacy parameter-count mode (`--params`) | `legacy_params_removed` |
+| `--params` together with `--model` | `conflicting_model_and_params` |
+| `--allow-estimate` with `--legacy-heuristic` | `irrelevant_flag_for_legacy_mode` |
 | context above `max_position_embeddings` | `context_exceeds_model_max` |
 | context × batch above 33 554 432 | `positions_too_large` |
 

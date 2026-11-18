@@ -234,3 +234,69 @@ def test_help_mentions_units_and_examples():
     assert res.returncode == 0
     assert "GiB" in res.stdout
     assert "python -m vram_calc calc" in res.stdout
+
+# --- P1-17: explicit flags must never be silently dropped -------------------
+# The legacy migration mode is the one place where two ways of naming a model
+# meet (--params for the guessed heuristic, --model for a catalogue id). A run
+# that passes BOTH used to exit 0 and ignore --model completely: the human
+# output never mentioned the model and even an unknown id such as
+# `--model NOT-A-MODEL` was accepted. That is the same honesty class as
+# P1-16 (--overhead-gib/--kv-dtype dropped in this mode): an argument the user
+# typed is silently discarded, so the printed number answers a question the
+# user did not ask.
+
+
+def test_legacy_heuristic_refuses_a_model_id_instead_of_ignoring_it():
+    """--params and --model contradict each other; refuse, never drop one."""
+    res = run(
+        "calc", "--params", "7", "--legacy-heuristic",
+        "--model", "qwen3-8b", "--ctx", "8192",
+    )
+    assert res.returncode == 2, res.stdout + res.stderr
+    assert "conflicting_model_and_params" in res.stderr
+    # the refusal must name both inputs and point at the two valid commands
+    assert "qwen3-8b" in res.stderr
+    assert "--params" in res.stderr and "--model" in res.stderr
+    assert "legacy-heuristic" in res.stderr
+
+
+def test_legacy_heuristic_conflict_is_refused_in_json_mode_too():
+    res = run(
+        "calc", "--params", "7", "--legacy-heuristic",
+        "--model", "qwen3-8b", "--ctx", "8192", "--json",
+    )
+    assert res.returncode == 2, res.stdout + res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["error"] == "conflicting_model_and_params"
+    assert payload["details"]["model"] == "qwen3-8b"
+    assert payload["details"]["params_b"] == 7.0
+
+
+def test_legacy_heuristic_rejects_even_an_unknown_model_instead_of_ignoring_it():
+    """A typo in --model must not silently turn into a heuristic answer."""
+    res = run(
+        "calc", "--params", "7", "--legacy-heuristic",
+        "--model", "NOT-A-MODEL", "--ctx", "8192",
+    )
+    assert res.returncode == 2, res.stdout + res.stderr
+    assert "conflicting_model_and_params" in res.stderr
+    assert "NOT-A-MODEL" in res.stderr
+
+
+def test_legacy_heuristic_without_model_still_runs():
+    """The documented migration path (--params + --legacy-heuristic only) stays usable."""
+    res = run("calc", "--params", "7", "--quant", "q4_k_m", "--ctx", "8192", "--legacy-heuristic")
+    assert res.returncode == 0, res.stderr
+    assert "NOT CONFIG-GROUNDED" in res.stdout
+
+
+def test_legacy_heuristic_reports_allow_estimate_as_meaningless_not_ignored():
+    """--allow-estimate cannot apply to the legacy table; say so instead of dropping it."""
+    res = run(
+        "calc", "--params", "7", "--legacy-heuristic",
+        "--allow-estimate", "--ctx", "8192", "--json",
+    )
+    assert res.returncode == 2, res.stdout + res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["error"] == "irrelevant_flag_for_legacy_mode"
+    assert payload["details"]["flag"] == "--allow-estimate"

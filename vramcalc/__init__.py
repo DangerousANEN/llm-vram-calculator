@@ -9,7 +9,7 @@ Public API::
 """
 from __future__ import annotations
 
-__version__ = "2.1.2"
+__version__ = "2.1.3"
 
 from .catalog import get_model, list_models, published_quants  # noqa: E402
 from .core import (  # noqa: E402
