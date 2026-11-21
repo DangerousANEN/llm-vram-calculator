@@ -89,7 +89,7 @@ def test_readme_documents_limits_formula_and_tests():
     for needle in ("GiB", "max_position_embeddings", "head_dim", "pytest", "MoE", "MLA", "sliding window", "offload"):
         assert needle in text, needle
     assert "--params" in text and "legacy" in text.lower()
-    assert "python -m vram_calc" in text
+    assert "python -m vramcalc" in text
 
 
 def test_page_ships_no_telemetry_or_tracking():

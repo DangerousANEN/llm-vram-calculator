@@ -16,7 +16,7 @@ import sys
 
 MIGRATION = (
     "[deprecated] vram_calc.py delegates to the vramcalc package. "
-    "Prefer `python -m vram_calc ...` (or the installed `vram-calc` command). "
+    "Prefer `python -m vramcalc ...` (or the installed `vram-calc` command). "
     "The old --params heuristic requires --legacy-heuristic and is no longer exact."
 )
 

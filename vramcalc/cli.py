@@ -30,9 +30,9 @@ units: every memory figure is GiB (1 GiB = 1024^3 bytes) and the exact byte valu
        is printed too. Nothing here is a measured VRAM reading.
 
 examples:
-  python -m vram_calc models
-  python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
-  python -m vram_calc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --json
+  python -m vramcalc models
+  python -m vramcalc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
+  python -m vramcalc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --json
 
 note: the `bench` subcommand is temporarily disabled in this release (no network
       probe is shipped); it refuses with a migration hint instead of measuring.
@@ -193,6 +193,36 @@ def _refuse_conflicting_model_and_params(args) -> None:
     an explicit argument must never be dropped, so the user has to say which
     question they are asking.
     """
+    if args.legacy_heuristic and args.params is None:
+        # The mode is selected by TWO flags: --legacy-heuristic only labels the
+        # answer, --params supplies the input. Without --params the label had no
+        # effect: `--legacy-heuristic --model qwen3-8b` printed a config-grounded
+        # ledger and never mentioned the flag, and the bare flag answered
+        # "missing_model", blaming the model instead of the missing --params.
+        ledger_hint = (
+            f"`python -m vramcalc calc --model {args.model} --quant {args.quant} --ctx {args.ctx}`"
+            if args.model
+            else "`python -m vramcalc calc --model <id> --quant q4_k_m --ctx 8192`"
+        )
+        raise InvalidParameter(
+            "--legacy-heuristic selects the old parameter-count heuristic, but that mode is driven by "
+            "--params <billions>; without --params the flag has no effect"
+            + (f" and your --model {args.model} would be answered by the config-grounded ledger instead"
+               if args.model else "")
+            + f". Either add the input: `python -m vramcalc calc --legacy-heuristic --params 7 "
+              f"--quant {args.quant} --ctx {args.ctx}` (labelled rough estimate), or drop --legacy-heuristic "
+              f"and ask for a ledger: {ledger_hint}.",
+            code="legacy_heuristic_requires_params",
+            details={
+                "flag": "--legacy-heuristic",
+                "required": "--params",
+                "model": args.model,
+                "legacy_command": (
+                    f"python -m vramcalc calc --legacy-heuristic --params 7 --quant {args.quant} --ctx {args.ctx}"
+                ),
+                "ledger_command": ledger_hint.strip("`"),
+            },
+        )
     if args.params is None or not args.legacy_heuristic:
         return
     if args.model:
@@ -200,18 +230,19 @@ def _refuse_conflicting_model_and_params(args) -> None:
             f"--params {args.params} and --model {args.model} ask for two different things: "
             "--params runs the old parameter-count heuristic (layers and KV heads guessed, NOT "
             "config-grounded), while --model reads the pinned config of a catalogue model. "
-            f"Pick one: `calc --model {args.model} --quant {args.quant} --ctx {args.ctx}` for a real "
-            f"ledger, or `calc --params {args.params} --legacy-heuristic --quant {args.quant} "
-            f"--ctx {args.ctx}` for the labelled rough estimate. Neither flag is dropped silently.",
+            f"Pick one: `python -m vramcalc calc --model {args.model} --quant {args.quant} "
+            f"--ctx {args.ctx}` for a real ledger, or `python -m vramcalc calc --params {args.params} "
+            f"--legacy-heuristic --quant {args.quant} --ctx {args.ctx}` for the labelled rough "
+            "estimate. Neither flag is dropped silently.",
             code="conflicting_model_and_params",
             details={
                 "model": args.model,
                 "params_b": args.params,
                 "model_command": (
-                    f"python -m vram_calc calc --model {args.model} --quant {args.quant} --ctx {args.ctx}"
+                    f"python -m vramcalc calc --model {args.model} --quant {args.quant} --ctx {args.ctx}"
                 ),
                 "params_command": (
-                    f"python -m vram_calc calc --params {args.params} --legacy-heuristic "
+                    f"python -m vramcalc calc --params {args.params} --legacy-heuristic "
                     f"--quant {args.quant} --ctx {args.ctx}"
                 ),
             },
@@ -294,12 +325,12 @@ def _cmd_calc(args) -> int:
                 "(arithmetic sum; still not a ledger total)"
             )
         print("=" * 68)
-        print(f" migrate: python -m vram_calc calc --model <id> --quant {args.quant} --ctx {args.ctx}")
+        print(f" migrate: python -m vramcalc calc --model <id> --quant {args.quant} --ctx {args.ctx}")
         print()
         return 0
     if not args.model:
         raise CalcError(
-            "calc needs --model. Run `python -m vram_calc models` for the supported list.",
+            "calc needs --model. Run `python -m vramcalc models` for the supported list.",
             code="missing_model",
         )
 

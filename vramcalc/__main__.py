@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""``python -m vram_calc`` entry point."""
+"""``python -m vramcalc`` entry point."""
 import sys
 
 from .cli import main

@@ -16,7 +16,7 @@ git clone https://github.com/DangerousANEN/llm-vram-calculator.git
 cd llm-vram-calculator
 
 # run from the checkout
-python -m vram_calc models
+python -m vramcalc models
 
 # or install the package (entry points: vram-calc, llm-vram-calc)
 pip install -e .
@@ -27,16 +27,16 @@ vram-calc models
 
 ```bash
 # list the pinned catalogue
-python -m vram_calc models
+python -m vramcalc models
 
 # Qwen2.5 7B Instruct, official Q4_K_M GGUF, 8192 tokens, one sequence
-python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
+python -m vramcalc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 
 # Qwen3 8B in bf16, 32k context, batch 4, plus a manual 2 GiB overhead bound
-python -m vram_calc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --overhead-gib 2
+python -m vramcalc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --overhead-gib 2
 
 # machine readable
-python -m vram_calc calc --model qwen3-8b --quant q4_k_m --ctx 8192 --json
+python -m vramcalc calc --model qwen3-8b --quant q4_k_m --ctx 8192 --json
 ```
 
 Sample output (trimmed):
@@ -136,7 +136,7 @@ deadline between chunks.
 This release therefore ships **no network benchmark code at all**:
 
 ```bash
-$ python -m vram_calc bench --url http://127.0.0.1:8000/v1 --model local-model
+$ python -m vramcalc bench --url http://127.0.0.1:8000/v1 --model local-model
 error [benchmark_disabled]: ... exit code 2, with a migration command
 ```
 
