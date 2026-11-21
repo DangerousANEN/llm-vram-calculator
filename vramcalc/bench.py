@@ -32,11 +32,11 @@ DISABLED_MESSAGE = (
     "release-safety review (redirect/auth forwarding, chunk-vs-token maths, incomplete-SSE success "
     "and a weak overall deadline). No network request is made. Use the server's own metrics for "
     "throughput, or run the memory ledger instead: "
-    "`python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192`."
+    "`python -m vramcalc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192`."
 )
 
 #: Printed with the refusal so existing scripts have a concrete next step.
-MIGRATION = "python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192"
+MIGRATION = "python -m vramcalc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192"
 
 
 def run_bench(

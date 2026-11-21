@@ -475,10 +475,10 @@ def refuse_legacy_params(params: object) -> None:
     raise UnsupportedQuant(
         f"--params {params} is no longer accepted as an exact calculation: the old mode guessed layer "
         "counts and KV heads from a parameter count, which is not config-grounded. Use "
-        "--model qwen2.5-7b-instruct (see `python -m vram_calc models`). If you only need a labelled "
+        "--model qwen2.5-7b-instruct (see `python -m vramcalc models`). If you only need a labelled "
         "rough estimate, pass --legacy-heuristic explicitly.",
         code="legacy_params_removed",
-        details={"params": params, "migration": "python -m vram_calc calc --model <id> --quant <q> --ctx <n>"},
+        details={"params": params, "migration": "python -m vramcalc calc --model <id> --quant <q> --ctx <n>"},
     )
 
 

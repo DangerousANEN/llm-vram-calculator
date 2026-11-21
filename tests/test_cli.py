@@ -233,7 +233,7 @@ def test_help_mentions_units_and_examples():
     res = run("--help")
     assert res.returncode == 0
     assert "GiB" in res.stdout
-    assert "python -m vram_calc calc" in res.stdout
+    assert "python -m vramcalc calc" in res.stdout
 
 # --- P1-17: explicit flags must never be silently dropped -------------------
 # The legacy migration mode is the one place where two ways of naming a model
@@ -300,3 +300,40 @@ def test_legacy_heuristic_reports_allow_estimate_as_meaningless_not_ignored():
     payload = json.loads(res.stdout)
     assert payload["error"] == "irrelevant_flag_for_legacy_mode"
     assert payload["details"]["flag"] == "--allow-estimate"
+
+
+# --- P1-18: --legacy-heuristic without --params was accepted and dropped ----
+# The mode selection lives in two flags: --params picks the guessed heuristic,
+# --model picks a catalogue ledger. `--legacy-heuristic --model qwen3-8b` (no
+# --params) exited 0 and printed a normal ledger: the flag the user typed was
+# never mentioned. `--legacy-heuristic` alone answered `missing_model`, which
+# blames the missing model instead of the missing --params.
+
+
+def test_legacy_heuristic_without_params_is_refused_not_ignored():
+    res = run("calc", "--legacy-heuristic", "--model", "qwen3-8b", "--ctx", "8192")
+    assert res.returncode == 2, res.stdout + res.stderr
+    assert "legacy_heuristic_requires_params" in res.stderr
+    assert "--params" in res.stderr
+    # it must not have printed a ledger while refusing
+    assert "LEDGER TOTAL" not in res.stdout
+    assert "Memory ledger" not in res.stdout
+
+
+def test_legacy_heuristic_alone_names_the_missing_flag_not_the_model():
+    res = run("calc", "--legacy-heuristic", "--quant", "q4_k_m", "--ctx", "8192")
+    assert res.returncode == 2, res.stdout + res.stderr
+    assert "legacy_heuristic_requires_params" in res.stderr
+    assert "missing_model" not in res.stderr
+
+
+def test_legacy_heuristic_without_params_is_refused_in_json_mode_too():
+    res = run(
+        "calc", "--legacy-heuristic", "--model", "qwen3-8b",
+        "--ctx", "8192", "--json",
+    )
+    assert res.returncode == 2, res.stdout + res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["error"] == "legacy_heuristic_requires_params"
+    assert payload["details"]["flag"] == "--legacy-heuristic"
+    assert payload["details"]["required"] == "--params"

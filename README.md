@@ -52,16 +52,16 @@ python scripts/fetch_model_metadata.py --check
 ```bash
 git clone https://github.com/DangerousANEN/llm-vram-calculator.git
 cd llm-vram-calculator
-python -m vram_calc models
+python -m vramcalc models
 
 # Qwen2.5 7B, Q4_K_M, контекст 8192, одна последовательность
-python -m vram_calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
+python -m vramcalc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 
 # Qwen3 8B, bf16, 32k, batch 4, плюс свой измеренный запас 2 GiB
-python -m vram_calc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --overhead-gib 2
+python -m vramcalc calc --model qwen3-8b --quant bf16 --ctx 32768 --batch 4 --overhead-gib 2
 
 # машинный вывод
-python -m vram_calc calc --model qwen3-8b --quant q4_k_m --ctx 8192 --json
+python -m vramcalc calc --model qwen3-8b --quant q4_k_m --ctx 8192 --json
 ```
 
 Установка как пакета (entry points `vram-calc` и `llm-vram-calc`):
@@ -71,7 +71,7 @@ pip install -e .     # или pip install dist/*.whl
 vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 ```
 
-`python vram_calc.py ...` продолжает работать, но печатает в stderr уведомление о миграции на `python -m vram_calc`.
+`python vram_calc.py ...` продолжает работать, но печатает в stderr уведомление о миграции на `python -m vramcalc`.
 
 ## Что калькулятор **отказывается** считать
 
@@ -97,11 +97,11 @@ vram-calc calc --model qwen2.5-7b-instruct --quant q4_k_m --ctx 8192
 ## CLI
 
 ```bash
-python -m vram_calc models                  # модели, ревизии, точные кванты
-python -m vram_calc calc --help
-python -m vram_calc calc --model ... --quant ... --ctx ... [--batch N] [--kv-dtype fp16|bf16] [--overhead-gib X] [--json]
+python -m vramcalc models                  # модели, ревизии, точные кванты
+python -m vramcalc calc --help
+python -m vramcalc calc --model ... --quant ... --ctx ... [--batch N] [--kv-dtype fp16|bf16] [--overhead-gib X] [--json]
 # bench ВРЕМЕННО ОТКЛЮЧЁН: сетевого пробника в этом релизе нет (код выхода 2, benchmark_disabled)
-python -m vram_calc bench --help
+python -m vramcalc bench --help
 ```
 
 ### Миграция со старого `--params`
@@ -109,14 +109,14 @@ python -m vram_calc bench --help
 Старый режим выводил число слоёв и KV-голов из количества параметров — это не конфиг. Он удалён как «точный»:
 
 ```bash
-$ python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192
+$ python -m vramcalc calc --params 7 --quant q4_k_m --ctx 8192
 error [legacy_params_removed]: ... Use --model qwen2.5-7b-instruct ...
 ```
 
 Если нужна именно грубая оценка для миграции скриптов — только явным флагом и с пометкой «NOT CONFIG-GROUNDED»:
 
 ```bash
-python -m vram_calc calc --params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic
+python -m vramcalc calc --params 7 --quant q4_k_m --ctx 8192 --legacy-heuristic
 ```
 
 Этот миграционный режим тоже не выбрасывает ваши флаги: `--kv-dtype` печатается
