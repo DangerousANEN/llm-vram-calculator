@@ -79,6 +79,25 @@ def test_convenience_mode_without_subcommand():
     assert "Memory ledger" in res.stdout
 
 
+def test_json_first_convenience_mode_is_not_misparsed():
+    """`--json` is a documented flag at both levels; putting it first must not
+    turn the model id into an argparse 'invalid choice' error.
+
+    Regression guard for the convenience shim: it prepends `calc` for every
+    leading option except `--json`, so `--json --model X` used to die with
+    "argument cmd: invalid choice: 'X'" and no hint about the real problem.
+    """
+    res = run("--json", "--model", "qwen3-8b", "--ctx", "4096")
+    assert res.returncode == 0, res.stderr
+    data = json.loads(res.stdout)
+    assert data["model_id"] == "qwen3-8b"
+    assert data["context"] == 4096
+    # a subcommand after --json must keep working exactly as before
+    models = run("--json", "models")
+    assert models.returncode == 0, models.stderr
+    assert json.loads(models.stdout)["catalog"]["data_source"] == "huggingface_hub_public_api"
+
+
 def test_missing_model_is_a_clear_error():
     res = run("calc", "--quant", "q4_k_m", "--ctx", "8192")
     assert res.returncode == 2
@@ -151,6 +170,21 @@ def test_legacy_heuristic_reports_the_kv_dtype_it_used():
     human = run("calc", "--params", "7", "--legacy-heuristic", "--kv-dtype", "bf16")
     assert human.returncode == 0, human.stderr
     assert "bf16" in human.stdout
+
+
+def test_legacy_human_output_names_context_and_sequences_it_used():
+    """--ctx and --batch change the KV number by design; the human report must
+    name the values it used, otherwise two outputs 4x apart look identical apart
+    from the total. JSON already carries context/batch; the text did not."""
+    res = run("calc", "--params", "7", "--legacy-heuristic", "--ctx", "4096", "--batch", "4")
+    assert res.returncode == 0, res.stderr
+    assert "4096 tokens" in res.stdout
+    assert "4 sequence(s)" in res.stdout
+
+    plain = run("calc", "--params", "7", "--legacy-heuristic", "--ctx", "4096")
+    assert plain.returncode == 0, plain.stderr
+    assert "4096 tokens" in plain.stdout
+    assert "1 sequence(s)" in plain.stdout
 
 
 def test_legacy_heuristic_refuses_an_out_of_range_overhead():
