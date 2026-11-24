@@ -310,6 +310,7 @@ def _cmd_calc(args) -> int:
             print(f"   - {k}")
         print("-" * 68)
         print(f" KV dtype          : {est['kv_dtype']} ({est['kv_bytes_per_element']} bytes/element)")
+        print(f" context           : {est['context']} tokens x {est['batch']} sequence(s)")
         print(f" estimated weights : {est['weights_gib']:.3f} GiB ({est['weights_bytes']} bytes)")
         print(f" estimated KV      : {est['kv_gib']:.3f} GiB ({est['kv_bytes']} bytes)")
         if est["manual_overhead_gib"] is None:
@@ -363,9 +364,18 @@ def _cmd_bench(args) -> int:
 
 def main(argv=None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    # convenience: allow `vram-calc --model X --ctx 8192` without the subcommand
-    if raw and raw[0].startswith("-") and raw[0] not in ("--json", "--version", "-h", "--help"):
-        raw = ["calc"] + raw
+    # convenience: allow `vram-calc --model X --ctx 8192` without the subcommand.
+    # `--json` is valid at both levels, so a leading `--json` followed by calc
+    # options must also be routed to `calc`: otherwise argparse treats the next
+    # token as a subcommand and reports "invalid choice: 'qwen3-8b'".
+    if raw and raw[0].startswith("-"):
+        if raw[0] == "--json":
+            if len(raw) > 1 and raw[1].startswith("-") and raw[1] not in (
+                "--json", "--version", "-h", "--help"
+            ):
+                raw = ["calc"] + raw
+        elif raw[0] not in ("--version", "-h", "--help"):
+            raw = ["calc"] + raw
     parser = build_parser()
     args = parser.parse_args(raw)
     as_json = bool(getattr(args, "json", False))
