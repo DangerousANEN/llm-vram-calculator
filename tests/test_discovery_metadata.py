@@ -19,7 +19,20 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INDEX = ROOT / "index.html"
 TEMPLATE = ROOT / "web" / "template.html"
+CATALOG = ROOT / "vramcalc" / "data" / "models.json"
 CANONICAL = "https://dangerousanen.github.io/llm-vram-calculator/"
+
+
+def _catalogue_short_names() -> list[str]:
+    data = json.loads(CATALOG.read_text(encoding="utf-8"))
+    return [model["short_name"] for model in data["models"]]
+
+
+def _description(source: str) -> str:
+    html = _head((ROOT / source).read_text(encoding="utf-8"))
+    desc = _meta(html, "description", attr="name")
+    assert desc, f"{source}: missing <meta name=description>"
+    return desc
 
 
 def _head(html: str) -> str:
@@ -120,3 +133,39 @@ def test_metadata_adds_no_runtime_fetch_or_third_party_script():
     assert not re.search(r'<script[^>]+src="https?://', html)
     assert "fetch(" not in html and "XMLHttpRequest" not in html
     assert "googletagmanager" not in html and "mc.yandex" not in html
+
+
+# --- the search snippet is the page as strangers first see it -------------
+# The meta description is the only sentence a user reads in a search result
+# before opening the page. It drifted once already: since the 2.1.0 catalogue
+# expansion it still advertised two of four models, so every search visitor
+# read a narrower tool than the one that is actually shipped. Pin it to the
+# catalogue so the next model addition cannot leave the snippet behind.
+
+@pytest.mark.parametrize("source", ["index.html", "web/template.html"])
+def test_meta_description_names_every_catalogue_model(source):
+    desc = _description(source)
+    missing = [name for name in _catalogue_short_names() if name not in desc]
+    assert not missing, (
+        f"{source}: meta description omits {missing}; "
+        "a search visitor then reads a narrower tool than the one we ship"
+    )
+
+
+@pytest.mark.parametrize("source", ["index.html", "web/template.html"])
+def test_meta_description_names_no_model_outside_the_catalogue(source):
+    desc = _description(source)
+    catalogued = set(_catalogue_short_names())
+    named = set(re.findall(r"Qwen[0-9A-Za-z.\-]*\w", desc))
+    unknown = sorted(named - catalogued)
+    assert not unknown, (
+        f"{source}: meta description advertises unsupported model ids {unknown}"
+    )
+
+
+@pytest.mark.parametrize("source", ["index.html", "web/template.html"])
+def test_meta_description_fits_a_search_snippet(source):
+    # ~160 characters is what a desktop result shows before truncating; a
+    # description longer than that loses its tail (models, limits) in the SERP.
+    desc = _description(source)
+    assert 60 <= len(desc) <= 160, f"{source}: meta description is {len(desc)} chars"
